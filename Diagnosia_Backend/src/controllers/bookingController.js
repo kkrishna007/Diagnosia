@@ -148,3 +148,57 @@ export const getAvailableSlots = async (req, res, next) => {
     next(err);
   }
 };
+
+// Reschedule an existing booking (update date/time)
+export const rescheduleBooking = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { appointment_date, appointment_time, reason } = req.body || {};
+
+    if (!appointment_date || !appointment_time) {
+      return res.status(400).json({ message: 'appointment_date and appointment_time are required' });
+    }
+
+    // Prevent rescheduling to the past
+    const targetDateTime = new Date(`${appointment_date}T${String(appointment_time).slice(0,8)}`);
+    if (isNaN(targetDateTime.getTime())) {
+      return res.status(400).json({ message: 'Invalid date/time' });
+    }
+    const now = new Date();
+    if (targetDateTime.getTime() < now.getTime()) {
+      return res.status(400).json({ message: 'Cannot reschedule to a past time' });
+    }
+
+    // Ensure booking belongs to user and is not cancelled
+    const existing = await pool.query(
+      `SELECT appointment_id, status FROM appointments WHERE appointment_id = $1 AND patient_id = $2`,
+      [id, req.user.user_id]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+    if (existing.rows[0].status === 'cancelled') {
+      return res.status(409).json({ message: 'Cancelled bookings cannot be rescheduled' });
+    }
+
+    // Update appointment
+    const updateRes = await pool.query(
+      `UPDATE appointments
+         SET appointment_date = $1,
+             appointment_time = $2,
+             rescheduled_reason = COALESCE($3, rescheduled_reason),
+             updated_at = NOW()
+       WHERE appointment_id = $4 AND patient_id = $5
+       RETURNING *`,
+      [appointment_date, appointment_time, reason || null, id, req.user.user_id]
+    );
+
+    if (updateRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    return res.json({ message: 'Appointment rescheduled', appointment: updateRes.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+};

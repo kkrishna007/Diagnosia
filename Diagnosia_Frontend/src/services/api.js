@@ -77,6 +77,7 @@ export const apiService = {
     getById: (id) => api.get(`/bookings/${id}`),
     update: (id, data) => api.put(`/bookings/${id}`, data),
     cancel: (id) => api.delete(`/bookings/${id}`),
+  reschedule: (id, data) => api.patch(`/bookings/${id}/reschedule`, data),
     getAvailableSlots: (date, testId) => 
       api.get(`/bookings/slots?date=${date}&testId=${testId}`),
   },

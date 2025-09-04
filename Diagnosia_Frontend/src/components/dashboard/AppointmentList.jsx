@@ -5,6 +5,7 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import { apiService } from '../../services/api';
+import TimeSlotPicker from '../booking/TimeSlotPicker';
 
 const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
@@ -114,15 +115,54 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
     }
   };
 
+  // State for reschedule flow
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleSlot, setRescheduleSlot] = useState('');
+  const [rescheduleError, setRescheduleError] = useState('');
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
+
+  const handleTimeSlotSelect = (date, slot) => {
+    setRescheduleDate(date);
+    setRescheduleSlot(slot);
+    setRescheduleError('');
+  };
+
+  const slotToStartTime = (slotId) => {
+    const map = {
+      '6-8': '06:00:00',
+      '8-10': '08:00:00',
+      '10-12': '10:00:00',
+      '12-14': '12:00:00',
+      '14-16': '14:00:00',
+      '16-18': '16:00:00',
+      '18-20': '18:00:00',
+    };
+    return map[slotId] || '10:00:00';
+  };
+
   const handleRescheduleAppointment = async () => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!selectedAppointment?.appointmentId && !selectedAppointment?.id) throw new Error('Missing appointment id');
+      if (!rescheduleDate || !rescheduleSlot) {
+        setRescheduleError('Please select a date and time slot');
+        return;
+      }
+      setRescheduleLoading(true);
+      const id = selectedAppointment?.appointmentId || selectedAppointment?.id;
+      await apiService.bookings.reschedule(id, {
+        appointment_date: rescheduleDate,
+        appointment_time: slotToStartTime(rescheduleSlot),
+      });
       setShowRescheduleModal(false);
       setSelectedAppointment(null);
+      setRescheduleDate('');
+      setRescheduleSlot('');
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error rescheduling appointment:', error);
+      setRescheduleError(error?.response?.data?.message || 'Failed to reschedule. Try another slot.');
+    } finally {
+      setRescheduleLoading(false);
     }
   };
 
@@ -230,7 +270,7 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
                 </div>
 
                 {/* Actions */}
-                {item.type === 'appointment' && item.status === 'confirmed' && (
+                {item.type === 'appointment' && ['confirmed','booked','rescheduled'].includes(item.status) && (
                   <div className="flex items-center space-x-2 ml-4">
                     <Button
                       variant="outline"
@@ -308,34 +348,33 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
       >
         <div className="space-y-4">
           <p className="text-gray-600">
-            To reschedule your appointment for{' '}
-            <strong>{selectedAppointment?.testName}</strong>, please contact our support team.
+            Choose a new date and time slot for <strong>{selectedAppointment?.testName}</strong>.
           </p>
-          <div className="p-4 bg-blue-50 rounded-lg">
-            <h4 className="font-medium text-blue-900 mb-2">Contact Support</h4>
-            <div className="space-y-2 text-sm text-blue-800">
-              <div className="flex items-center space-x-2">
-                <Phone className="h-4 w-4" />
-                <span>+91 98765 43210</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span>📧</span>
-                <span>support@diagnosia.com</span>
-              </div>
-            </div>
+          {/* Reuse booking TimeSlotPicker */}
+          <div className="border rounded-lg p-3">
+            <TimeSlotPicker
+              onTimeSlotSelect={handleTimeSlotSelect}
+              selectedDate={rescheduleDate}
+              selectedTimeSlot={rescheduleSlot}
+            />
           </div>
-          <p className="text-sm text-gray-500">
-            Our team will help you find a new suitable time slot based on your availability.
-          </p>
-          <div className="flex justify-end space-x-3 pt-4">
+          {rescheduleError && (
+            <div className="text-sm text-red-600">{rescheduleError}</div>
+          )}
+          <div className="flex justify-end space-x-3 pt-2">
             <Button
               variant="outline"
-              onClick={() => setShowRescheduleModal(false)}
+              onClick={() => {
+                setShowRescheduleModal(false);
+                setRescheduleDate('');
+                setRescheduleSlot('');
+                setRescheduleError('');
+              }}
             >
-              Close
+              Cancel
             </Button>
-            <Button onClick={() => window.open('tel:+919876543210')}>
-              Call Support
+            <Button onClick={handleRescheduleAppointment} disabled={rescheduleLoading || !rescheduleDate || !rescheduleSlot}>
+              {rescheduleLoading ? 'Rescheduling...' : 'Confirm Reschedule'}
             </Button>
           </div>
         </div>
