@@ -1,0 +1,46 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+}
+
+.navbar {
+  background: #088395;
+  color: white;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.navbar ul { list-style: none; display: flex; gap: 20px; }
+.navbar ul li a { color: white; text-decoration: none; }
+
+.footer {
+  background: #052a3f;
+  color: white;
+  text-align: center;
+  padding: 15px;
+}
+
+.auth-form, .dashboard, .booking {
+  max-width: 400px;
+  margin: 20px auto;
+  text-align: center;
+}
+
+.test-list {
+  display: flex;
+  gap: 10px;
+}
+
+.test-card {
+  border: 1px solid #ccc;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.test-card.selected {
+  border: 2px solid #088395;
+}
+
+.error { color: red; }
