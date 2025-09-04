@@ -1,5 +1,5 @@
 import { apiService } from '../../services/api';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, User, Phone, Mail } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import Card from '../ui/Card';
@@ -7,13 +7,14 @@ import Button from '../ui/Button';
 import Input from '../ui/input';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import TimeSlotPicker from './TimeSlotPicker';
+import { formatName } from '../../utils/helpers';
 
 const BookingForm = ({ selectedTest, onBookingComplete }) => {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
-    patientName: user?.name || '',
-    patientEmail: user?.email || '',
-    patientPhone: user?.phone || '',
+    patientName: '',
+    patientEmail: '',
+    patientPhone: '',
     address: '',
     selectedDate: '',
     selectedTimeSlot: '',
@@ -21,6 +22,19 @@ const BookingForm = ({ selectedTest, onBookingComplete }) => {
   });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const HOME_SURCHARGE = 300;
+  const [appointmentType, setAppointmentType] = useState('lab_visit'); // 'lab_visit' | 'home_collection'
+
+  // Autofill from logged-in user when available, but don't override user edits
+  useEffect(() => {
+    if (!user) return;
+    setFormData(prev => ({
+      ...prev,
+      patientName: prev.patientName || formatName(user?.first_name, user?.last_name) || user?.name || '',
+      patientEmail: prev.patientEmail || user?.email || '',
+      patientPhone: prev.patientPhone || user?.phone || '',
+    }));
+  }, [user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -71,8 +85,10 @@ const BookingForm = ({ selectedTest, onBookingComplete }) => {
       newErrors.patientPhone = 'Please enter a valid 10-digit phone number';
     }
 
-    if (!formData.address.trim()) {
-      newErrors.address = 'Address is required for home collection';
+    if (appointmentType === 'home_collection') {
+      if (!formData.address.trim()) {
+        newErrors.address = 'Collection address is required for home collection';
+      }
     }
 
     if (!formData.selectedDate) {
@@ -97,17 +113,70 @@ const BookingForm = ({ selectedTest, onBookingComplete }) => {
     setIsLoading(true);
     try {
       // Call backend API to create booking
+      const test_code = selectedTest?.test_code || selectedTest?.code || selectedTest?.test_id || selectedTest?.id;
+      // Map slot id to a concrete start time (HH:MM)
+      const slotToStartTime = (slotId) => {
+        const map = {
+          '6-8': '06:00',
+          '8-10': '08:00',
+          '10-12': '10:00',
+          '12-14': '12:00',
+          '14-16': '14:00',
+          '16-18': '16:00',
+          '18-20': '18:00',
+        };
+        return map[slotId] || '10:00';
+      };
+      // Compute patient age from user date_of_birth if available
+      const computeAge = (dobStr) => {
+        if (!dobStr) return null;
+        const dob = new Date(dobStr);
+        if (isNaN(dob)) return null;
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+          age--;
+        }
+        return age < 0 ? null : age;
+      };
+      const patientAge = computeAge(user?.date_of_birth);
+      const patientGender = user?.gender || null;
       const bookingPayload = {
-        test_id: selectedTest.id,
-        slot: `${formData.selectedDate} ${formData.selectedTimeSlot}`,
+        test_code,
+        appointment_date: formData.selectedDate,
+        appointment_time: slotToStartTime(formData.selectedTimeSlot),
+  appointment_type: appointmentType,
         patient_name: formData.patientName,
-        address: formData.address,
-        notes: formData.notes,
+        patient_age: patientAge,
+        patient_gender: patientGender,
+        patient_email: formData.patientEmail,
+        patient_phone: formData.patientPhone,
+        // Let backend handle address id; include address in special_instructions for traceability
+        special_instructions: [
+          formData.notes?.trim(),
+          appointmentType === 'home_collection' && formData.address?.trim()
+            ? `Collection Address: ${formData.address.trim()}`
+            : ''
+        ].filter(Boolean).join(' | '),
       };
       const response = await apiService.bookings.create(bookingPayload);
+      const appt = response.data?.appointment || {};
+      const apptTest = response.data?.appointment_test || {};
       const bookingData = {
         test: selectedTest,
-        booking: response.data,
+        booking: {
+          bookingId: appt.appointment_id,
+          selectedDate: appt.appointment_date,
+          selectedTimeSlot: formData.selectedTimeSlot,
+          address: appointmentType === 'home_collection' ? formData.address : '',
+          notes: formData.notes,
+          totalAmount: appt.total_amount,
+          patientName: apptTest.patient_name || formData.patientName,
+          patientPhone: formData.patientPhone,
+          patientEmail: formData.patientEmail,
+          appointmentType,
+        },
       };
       if (onBookingComplete) {
         onBookingComplete(bookingData);
@@ -129,6 +198,17 @@ const BookingForm = ({ selectedTest, onBookingComplete }) => {
     }).format(price);
   };
 
+  // Derive robust test display fields from backend or legacy shapes
+  const testName = selectedTest?.name || selectedTest?.test_name || 'Untitled Test';
+  const testDescription = selectedTest?.description || selectedTest?.test_description || '';
+  const sampleType = selectedTest?.sampleType || selectedTest?.sample_type || '';
+  const fastingRequired = selectedTest?.fastingRequired || selectedTest?.fasting_required || false;
+  const reportTime = selectedTest?.report_time_hours != null
+    ? `${selectedTest.report_time_hours} hours`
+    : '24 hours';
+  const price = selectedTest?.base_price ? Number(selectedTest.base_price) : (selectedTest?.price || 0);
+  const totalPrice = price + (appointmentType === 'home_collection' ? HOME_SURCHARGE : 0);
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Test Summary */}
@@ -139,19 +219,47 @@ const BookingForm = ({ selectedTest, onBookingComplete }) => {
             <Calendar className="h-6 w-6 text-blue-600" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-gray-900">{selectedTest.name}</h3>
-            <p className="text-gray-600 text-sm mt-1">{selectedTest.description}</p>
+      <h3 className="font-semibold text-gray-900">{testName}</h3>
+      <p className="text-gray-600 text-sm mt-1">{testDescription}</p>
             <div className="flex items-center justify-between mt-3">
               <div className="flex items-center space-x-4 text-sm text-gray-600">
-                <span>🧪 {selectedTest.sampleType}</span>
-                <span>⏱️ Results in {selectedTest.reportTime || '24 hours'}</span>
-                {selectedTest.fastingRequired && <span>⚠️ Fasting required</span>}
+        {sampleType && <span>🧪 {sampleType}</span>}
+        <span>⏱️ Results in {reportTime}</span>
+        {fastingRequired && <span>⚠️ Fasting required</span>}
               </div>
               <div className="text-2xl font-bold text-blue-600">
-                {formatPrice(selectedTest.price)}
+        {formatPrice(price)}
               </div>
             </div>
           </div>
+        </div>
+      </Card>
+
+      {/* Appointment Type */}
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Choose Appointment Type</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <button
+            type="button"
+            onClick={() => setAppointmentType('lab_visit')}
+            className={`p-4 border rounded-lg text-left transition-colors ${appointmentType === 'lab_visit' ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-blue-300 hover:bg-blue-50/40'}`}
+          >
+            <div className="font-semibold text-gray-900">Lab Visit</div>
+            <div className="text-sm text-gray-600">Visit our lab at the scheduled time</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAppointmentType('home_collection')}
+            className={`p-4 border rounded-lg text-left transition-colors ${appointmentType === 'home_collection' ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-blue-300 hover:bg-blue-50/40'}`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-semibold text-gray-900">Home Collection</div>
+                <div className="text-sm text-gray-600">Phlebotomist collects sample at your address</div>
+              </div>
+              <div className="text-sm font-medium text-blue-600">+ {formatPrice(HOME_SURCHARGE)}</div>
+            </div>
+          </button>
         </div>
       </Card>
 
@@ -236,7 +344,8 @@ const BookingForm = ({ selectedTest, onBookingComplete }) => {
           </div>
         </Card>
 
-        {/* Collection Address */}
+        {/* Collection Address (only for Home Collection) */}
+        {appointmentType === 'home_collection' && (
         <Card>
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
             <MapPin className="h-5 w-5" />
@@ -264,6 +373,7 @@ const BookingForm = ({ selectedTest, onBookingComplete }) => {
             )}
           </div>
         </Card>
+        )}
 
         {/* Date and Time Selection */}
         <Card>
@@ -299,7 +409,7 @@ const BookingForm = ({ selectedTest, onBookingComplete }) => {
           />
         </Card>
 
-        {/* Submit Button */}
+    {/* Submit Button */}
         <div className="flex justify-end space-x-4">
           <Button
             type="button"
@@ -314,7 +424,7 @@ const BookingForm = ({ selectedTest, onBookingComplete }) => {
             disabled={isLoading}
             className="min-w-[120px]"
           >
-            {isLoading ? <LoadingSpinner size="sm" /> : `Book for ${formatPrice(selectedTest.price)}`}
+      {isLoading ? <LoadingSpinner size="sm" /> : `Book for ${formatPrice(totalPrice)}`}
           </Button>
         </div>
       </form>

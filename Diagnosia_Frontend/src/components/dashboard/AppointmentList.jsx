@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, Clock, MapPin, Phone, MoreVertical, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
@@ -49,8 +49,44 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
     }
   };
 
-  const formatDate = (dateString) => {
-    return format(new Date(dateString), 'MMM d, yyyy');
+  const safeParseDate = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    return isValid(d) ? d : null;
+  };
+
+  const formatDate = (dateLike) => {
+    const d = safeParseDate(dateLike);
+    return d ? format(d, 'MMM d, yyyy') : '-';
+  };
+
+  const timeSlotLabel = (ts) => {
+    if (!ts) return '-';
+    const map = {
+      '6-8': '6:00 AM - 8:00 AM',
+      '8-10': '8:00 AM - 10:00 AM',
+      '10-12': '10:00 AM - 12:00 PM',
+      '12-14': '12:00 PM - 2:00 PM',
+      '14-16': '2:00 PM - 4:00 PM',
+      '16-18': '4:00 PM - 6:00 PM',
+      '18-20': '6:00 PM - 8:00 PM',
+    };
+    return map[ts] || ts;
+  };
+
+  const normalizeAppointment = (item) => {
+    const dateRaw = item?.date || item?.appointment_date || item?.collection_date || item?.scheduled_for || item?.created_at;
+    const timeRaw = item?.timeSlot || item?.appointment_time || item?.time || item?.slot || item?.time_slot;
+    return {
+      ...item,
+      id: item?.id ?? item?.appointment_id ?? item?.appointmentId ?? item?.bookingId,
+      bookingId: item?.bookingId ?? item?.id ?? item?.appointment_id ?? item?.appointmentId ?? item?.reference_code,
+      testName: item?.testName ?? item?.test_name ?? item?.name ?? item?.test?.name ?? 'Lab Test',
+      status: (item?.status ?? item?.appointment_status ?? 'confirmed')?.toLowerCase?.() || 'confirmed',
+      date: dateRaw || null,
+      dateObj: safeParseDate(dateRaw),
+      timeSlot: timeSlotLabel(timeRaw),
+    };
   };
 
   const handleCancelAppointment = async () => {
@@ -77,10 +113,14 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
     }
   };
 
-  const allAppointments = [
-    ...appointments.map(apt => ({ ...apt, type: 'appointment' })),
-    ...pendingReports.map(report => ({ ...report, type: 'pending_report' }))
-  ].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const normalizedAppointments = (appointments || []).map(apt => ({ ...normalizeAppointment(apt), type: 'appointment' }));
+  const normalizedPending = (pendingReports || []).map(report => ({ ...normalizeAppointment(report), type: 'pending_report' }));
+  const allAppointments = [...normalizedAppointments, ...normalizedPending]
+    .sort((a, b) => {
+      const ad = a.dateObj ? a.dateObj.getTime() : Number.POSITIVE_INFINITY;
+      const bd = b.dateObj ? b.dateObj.getTime() : Number.POSITIVE_INFINITY;
+      return ad - bd;
+    });
 
   return (
     <div className="space-y-6">
@@ -106,8 +146,8 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
         </Card>
       ) : (
         <div className="space-y-4">
-          {allAppointments.map((item) => (
-            <Card key={`${item.type}-${item.id}`} className="p-6">
+          {allAppointments.map((item, idx) => (
+            <Card key={`${item.type}-${item.bookingId || item.id || idx}`} className="p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center space-x-3 mb-2">

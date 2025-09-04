@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS tests (
   category_id INTEGER REFERENCES test_categories(category_id),
   base_price DECIMAL(10,2) NOT NULL,
   duration_hours INTEGER NOT NULL,
+  -- Report turnaround time (TAT) in hours for patient-facing messaging
+  report_time_hours INTEGER,
   preparation_instructions TEXT,
   sample_type VARCHAR(100) NOT NULL,
   fasting_required BOOLEAN DEFAULT FALSE,

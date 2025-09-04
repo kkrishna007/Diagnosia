@@ -8,12 +8,51 @@ export const createBooking = async (req, res, next) => {
     const testRes = await pool.query('SELECT base_price FROM tests WHERE test_code = $1', [test_code]);
     if (testRes.rows.length === 0) return res.status(400).json({ message: 'Test not found' });
     const test_price = testRes.rows[0].base_price;
+
+    // Fallbacks from user's profile if age/gender/name not provided
+    let finalPatientName = patient_name;
+    let finalPatientAge = patient_age;
+    let finalPatientGender = patient_gender;
+    if (!finalPatientName || finalPatientAge == null || !finalPatientGender) {
+      const userRes = await pool.query(
+        'SELECT first_name, last_name, date_of_birth, gender FROM users WHERE user_id = $1',
+        [req.user.user_id]
+      );
+      if (userRes.rows.length) {
+        const u = userRes.rows[0];
+        if (!finalPatientName) {
+          finalPatientName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Patient';
+        }
+        if (finalPatientAge == null && u.date_of_birth) {
+          const dob = new Date(u.date_of_birth);
+          if (!isNaN(dob)) {
+            const today = new Date();
+            let age = today.getFullYear() - dob.getFullYear();
+            const m = today.getMonth() - dob.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+            finalPatientAge = Math.max(0, age);
+          }
+        }
+        if (!finalPatientGender && u.gender) {
+          // Ensure it matches CHECK constraint: 'male','female','other'
+          finalPatientGender = String(u.gender).toLowerCase();
+        }
+      }
+    }
+
+    // Guard against nulls for NOT NULL columns
+    if (finalPatientAge == null) return res.status(400).json({ message: 'Patient age is required' });
+    if (!finalPatientGender) return res.status(400).json({ message: 'Patient gender is required' });
+
+    // Compute total amount incl. home collection surcharge
+    const HOME_SURCHARGE = 300;
+    const totalAmount = Number(test_price) + (appointment_type === 'home_collection' ? HOME_SURCHARGE : 0);
     // Create appointment
     const apptRes = await pool.query(
       `INSERT INTO appointments (patient_id, appointment_date, appointment_time, appointment_type, collection_address_id, status, total_amount, special_instructions)
        VALUES ($1, $2, $3, $4, $5, 'booked', $6, $7)
        RETURNING *`,
-      [req.user.user_id, appointment_date, appointment_time, appointment_type, collection_address_id, test_price, special_instructions]
+  [req.user.user_id, appointment_date, appointment_time, appointment_type, collection_address_id, totalAmount, special_instructions]
     );
     const appointment = apptRes.rows[0];
     // Create appointment_test
@@ -21,7 +60,7 @@ export const createBooking = async (req, res, next) => {
       `INSERT INTO appointment_tests (appointment_id, test_code, test_price, patient_name, patient_age, patient_gender, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'booked')
        RETURNING *`,
-      [appointment.appointment_id, test_code, test_price, patient_name, patient_age, patient_gender]
+  [appointment.appointment_id, test_code, test_price, finalPatientName, finalPatientAge, finalPatientGender]
     );
     res.status(201).json({ appointment, appointment_test: apptTestRes.rows[0] });
   } catch (err) {

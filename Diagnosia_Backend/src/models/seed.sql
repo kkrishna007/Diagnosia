@@ -38,17 +38,17 @@ INSERT INTO test_categories (category_name, category_description, category_icon)
 ON CONFLICT (category_name) DO NOTHING;
 
 -- 6. Tests
-INSERT INTO tests (test_code, test_name, test_description, category_id, base_price, duration_hours, preparation_instructions, sample_type, fasting_required, fasting_hours, gender_specific) VALUES
-  ('CBC', 'Complete Blood Count (CBC)', 'A comprehensive blood test that evaluates your overall health and detects a variety of disorders.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 350, 1, 'No special prep', 'Blood', false, NULL, NULL),
-  ('LIPID', 'Lipid Profile', 'Measures cholesterol and triglyceride levels to assess cardiovascular risk.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 450, 1, 'Fasting required', 'Blood', true, NULL, NULL),
-  ('THYROID', 'Thyroid Profile (T3, T4, TSH)', 'Comprehensive thyroid function test including T3, T4, and TSH hormones.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 600, 2, 'No special prep', 'Blood', false, NULL, NULL),
-  ('DIABPKG', 'Diabetes Package (HbA1c + Glucose)', 'Complete diabetes monitoring package with HbA1c and glucose levels.', (SELECT category_id FROM test_categories WHERE category_name='package'), 800, 1, 'Fasting required', 'Blood', true, NULL, NULL),
-  ('LFT', 'Liver Function Test (LFT)', 'Comprehensive liver function assessment including all major enzymes.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 500, 1, 'No alcohol 24h', 'Blood', false, NULL, NULL),
-  ('KFT', 'Kidney Function Test (KFT)', 'Complete kidney function evaluation including creatinine and urea.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 400, 1, 'No special prep', 'Blood', false, NULL, NULL),
-  ('URINE', 'Urine Routine Examination', 'Complete urine analysis for urinary tract infections and kidney health.', (SELECT category_id FROM test_categories WHERE category_name='Urine'), 200, 1, 'No special prep', 'Urine', false, NULL, NULL),
-  ('VITD', 'Vitamin D Test', 'Measures vitamin D levels to assess bone health and immunity.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 1200, 2, 'No special prep', 'Blood', false, NULL, NULL),
-  ('HEALTHPKG', 'Complete Health Checkup', 'Comprehensive health package with 50+ parameters for overall health assessment.', (SELECT category_id FROM test_categories WHERE category_name='package'), 2500, 2, 'Fasting required', 'Blood & Urine', true, NULL, NULL),
-  ('IRON', 'Iron Deficiency Panel', 'Complete iron studies including ferritin, iron, and TIBC.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 800, 1, 'No special prep', 'Blood', false, NULL, NULL)
+INSERT INTO tests (test_code, test_name, test_description, category_id, base_price, duration_hours, report_time_hours, preparation_instructions, sample_type, fasting_required, fasting_hours, gender_specific) VALUES
+  ('CBC', 'Complete Blood Count (CBC)', 'A comprehensive blood test that evaluates your overall health and detects a variety of disorders.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 350, 1, 24, 'No special prep', 'Blood', false, NULL, NULL),
+  ('LIPID', 'Lipid Profile', 'Measures cholesterol and triglyceride levels to assess cardiovascular risk.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 450, 1, 24, 'Fasting required', 'Blood', true, 12, NULL),
+  ('THYROID', 'Thyroid Profile (T3, T4, TSH)', 'Comprehensive thyroid function test including T3, T4, and TSH hormones.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 600, 2, 24, 'No special prep', 'Blood', false, NULL, NULL),
+  ('DIABPKG', 'Diabetes Package (HbA1c + Glucose)', 'Complete diabetes monitoring package with HbA1c and glucose levels.', (SELECT category_id FROM test_categories WHERE category_name='package'), 800, 1, 24, 'Fasting required', 'Blood', true, 8, NULL),
+  ('LFT', 'Liver Function Test (LFT)', 'Comprehensive liver function assessment including all major enzymes.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 500, 1, 24, 'No alcohol 24h', 'Blood', false, NULL, NULL),
+  ('KFT', 'Kidney Function Test (KFT)', 'Complete kidney function evaluation including creatinine and urea.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 400, 1, 24, 'No special prep', 'Blood', false, NULL, NULL),
+  ('URINE', 'Urine Routine Examination', 'Complete urine analysis for urinary tract infections and kidney health.', (SELECT category_id FROM test_categories WHERE category_name='Urine'), 200, 1, 24, 'No special prep', 'Urine', false, NULL, NULL),
+  ('VITD', 'Vitamin D Test', 'Measures vitamin D levels to assess bone health and immunity.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 1200, 2, 48, 'No special prep', 'Blood', false, NULL, NULL),
+  ('HEALTHPKG', 'Complete Health Checkup', 'Comprehensive health package with 50+ parameters for overall health assessment.', (SELECT category_id FROM test_categories WHERE category_name='package'), 2500, 2, 72, 'Fasting required', 'Blood & Urine', true, 12, NULL),
+  ('IRON', 'Iron Deficiency Panel', 'Complete iron studies including ferritin, iron, and TIBC.', (SELECT category_id FROM test_categories WHERE category_name='Blood'), 800, 1, 24, 'No special prep', 'Blood', false, NULL, NULL)
 ON CONFLICT (test_code) DO NOTHING;
 
 -- 7. Payment Methods

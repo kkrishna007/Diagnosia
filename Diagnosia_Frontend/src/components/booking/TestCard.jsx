@@ -35,7 +35,9 @@ const TestCard = ({ test, onSelect }) => {
   const price = test.base_price ? Number(test.base_price) : (test.price || 0);
   const fastingRequired = test.fastingRequired || test.fasting_required || false;
   const parameters = test.parameters || '';
-  const reportTime = test.reportTime || (test.duration_hours ? `${test.duration_hours} hours` : '24 hours');
+  const reportTime = test.report_time_hours != null
+    ? `${test.report_time_hours} hours`
+    : '24 hours';
 
   return (
     <Card className="h-full flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-1">

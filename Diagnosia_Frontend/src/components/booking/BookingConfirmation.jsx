@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckCircle, Calendar, MapPin, Clock, Download, Share2, Home } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
@@ -7,6 +7,15 @@ import Button from '../ui/Button';
 
 const BookingConfirmation = ({ bookingData }) => {
   const { test, booking } = bookingData;
+  const [showGlow, setShowGlow] = useState(true);
+
+  useEffect(() => {
+    // Subtle success glow
+    const t1 = setTimeout(() => setShowGlow(false), 1200);
+    return () => {
+      clearTimeout(t1);
+    };
+  }, []);
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('en-IN', {
@@ -55,11 +64,21 @@ const BookingConfirmation = ({ bookingData }) => {
     }
   };
 
+  const testName = test?.name || test?.test_name || 'Lab Test';
+  const testDescription = test?.description || test?.test_description || '';
+  const sampleType = test?.sampleType || test?.sample_type || test?.sample || test?.specimen_type || null;
+  const fastingRequired = test?.fastingRequired || test?.fasting_required || false;
+  const fastingHours = test?.fasting_hours ?? test?.fastingHours ?? null;
+  const reportTime = test?.report_time_hours != null
+    ? `${test.report_time_hours} hours`
+    : '24 hours';
+  const appointmentTypeLabel = booking?.appointmentType === 'home_collection' ? 'Home Collection' : 'Lab Visit';
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+  <div className={`max-w-2xl mx-auto space-y-6 transition-shadow ${showGlow ? 'shadow-[0_0_0_4px_rgba(34,197,94,0.2)] rounded-xl' : ''}`}>
       {/* Success Header */}
       <div className="text-center py-8">
-        <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+  <div className={`mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 ${showGlow ? 'animate-pulse' : ''}`}>
           <CheckCircle className="h-10 w-10 text-green-600" />
         </div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Booking Confirmed!</h1>
@@ -86,17 +105,27 @@ const BookingConfirmation = ({ bookingData }) => {
 
           {/* Test Information */}
           <div className="border-b pb-4">
-            <h3 className="font-semibold text-gray-900 mb-2">{test.name}</h3>
-            <p className="text-gray-600 text-sm">{test.description}</p>
+            <h3 className="font-semibold text-gray-900 mb-2">{testName}</h3>
+            {testDescription && <p className="text-gray-600 text-sm">{testDescription}</p>}
             <div className="flex items-center justify-between mt-3">
               <div className="flex items-center space-x-4 text-sm text-gray-600">
-                <span>🧪 {test.sampleType}</span>
-                <span>⏱️ Results in {test.reportTime || '24 hours'}</span>
-                {test.fastingRequired && <span>⚠️ Fasting required</span>}
+                {sampleType && <span>🧪 {sampleType}</span>}
+                <span>⏱️ Results in {reportTime}</span>
+                {fastingRequired && (
+                  <span>
+                    ⚠️ Fasting required{typeof fastingHours === 'number' ? ` (${fastingHours} hours)` : ''}
+                  </span>
+                )}
               </div>
               <div className="text-xl font-bold text-gray-900">
                 {formatPrice(booking.totalAmount)}
               </div>
+            </div>
+            <div className="mt-3">
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${booking?.appointmentType === 'home_collection' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
+                <Home className="h-3 w-3 mr-1" />
+                {appointmentTypeLabel}
+              </span>
             </div>
           </div>
 
@@ -139,13 +168,15 @@ const BookingConfirmation = ({ bookingData }) => {
               </div>
             </div>
             
-            <div className="mt-4 flex items-start space-x-3">
-              <MapPin className="h-5 w-5 text-blue-600 mt-1" />
-              <div>
-                <div className="text-sm text-gray-600">Collection Address</div>
-                <div className="font-medium">{booking.address}</div>
+            {booking?.appointmentType === 'home_collection' && !!booking?.address && (
+              <div className="mt-4 flex items-start space-x-3">
+                <MapPin className="h-5 w-5 text-blue-600 mt-1" />
+                <div>
+                  <div className="text-sm text-gray-600">Collection Address</div>
+                  <div className="font-medium">{booking.address}</div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Additional Notes */}
@@ -162,18 +193,37 @@ const BookingConfirmation = ({ bookingData }) => {
       <Card>
         <h3 className="font-semibold text-gray-900 mb-4">Important Information</h3>
         <div className="space-y-3 text-sm text-gray-600">
-          <div className="flex items-start space-x-2">
-            <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
-            <div>Our phlebotomist will arrive at your scheduled time. Please be available 15 minutes before.</div>
-          </div>
-          <div className="flex items-start space-x-2">
-            <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
-            <div>A confirmation SMS and email will be sent to you with detailed instructions.</div>
-          </div>
-          <div className="flex items-start space-x-2">
-            <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
-            <div>You can track your sample collection and report status in your dashboard.</div>
-          </div>
+          {booking?.appointmentType === 'home_collection' ? (
+            <>
+              <div className="flex items-start space-x-2">
+                <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                <div>Our phlebotomist will arrive at your address at the scheduled time. Please be available 15 minutes before.</div>
+              </div>
+              <div className="flex items-start space-x-2">
+                <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                <div>Ensure your phone is reachable and the address details are accurate for smooth collection.</div>
+              </div>
+              <div className="flex items-start space-x-2">
+                <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                <div>A confirmation SMS and email will be sent with detailed instructions.</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-start space-x-2">
+                <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                <div>Please arrive at the lab 10–15 minutes before your scheduled time.</div>
+              </div>
+              <div className="flex items-start space-x-2">
+                <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                <div>Carry a valid ID proof when you visit the lab.</div>
+              </div>
+              <div className="flex items-start space-x-2">
+                <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                <div>A confirmation SMS and email will be sent with detailed instructions.</div>
+              </div>
+            </>
+          )}
           {test.fastingRequired && (
             <div className="flex items-start space-x-2">
               <div className="w-2 h-2 bg-amber-600 rounded-full mt-2"></div>
@@ -205,7 +255,7 @@ const BookingConfirmation = ({ bookingData }) => {
           <span>Share Details</span>
         </Button>
         
-        <Link to="/dashboard" className="flex-1">
+  <Link to="/dashboard?tab=appointments" className="flex-1">
           <Button className="w-full flex items-center justify-center space-x-2">
             <Home className="h-4 w-4" />
             <span>Go to Dashboard</span>

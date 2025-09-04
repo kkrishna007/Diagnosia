@@ -1,5 +1,6 @@
 import { apiService } from '../../services/api';
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Calendar, TestTube, FileText, Clock, User, Phone, Mail } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import Card from '../ui/Card';
@@ -14,6 +15,7 @@ import { formatDate, formatName, formatPhoneNumber } from '../../utils/helpers';
 const UserDashboard = () => {
   const { user, updateUser } = useAuth();
   const firstName = user?.first_name || user?.firstName || 'User';
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('overview');
   const [dashboardData, setDashboardData] = useState({
     upcomingAppointments: [],
@@ -41,6 +43,14 @@ const UserDashboard = () => {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab && ['overview','appointments','results'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     // Sync form with user context when modal opens
