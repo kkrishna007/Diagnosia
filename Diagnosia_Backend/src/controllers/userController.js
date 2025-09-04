@@ -3,15 +3,52 @@ import pool from '../../config/db.js';
 // Get all appointments for the logged-in user
 export const getAppointments = async (req, res, next) => {
   try {
-    const appointments = await pool.query(
-      `SELECT a.*, ua.address
+    // Fetch raw data and compute derived fields in JS for portability
+    const result = await pool.query(
+      `SELECT 
+         a.*, 
+         at.*, 
+         t.test_name, 
+         t.report_time_hours,
+         t.duration_hours,
+         ua.address,
+         EXISTS (
+           SELECT 1 FROM samples s 
+           WHERE s.appointment_test_id = at.appointment_test_id AND s.collected_at IS NOT NULL
+         ) as has_sample_collected
        FROM appointments a
+       JOIN appointment_tests at ON a.appointment_id = at.appointment_id
+       JOIN tests t ON at.test_code = t.test_code
        LEFT JOIN user_addresses ua ON a.collection_address_id = ua.address_id
        WHERE a.patient_id = $1
        ORDER BY a.appointment_date DESC, a.appointment_time DESC`,
       [req.user.user_id]
     );
-    res.json(appointments.rows);
+
+    const rows = result.rows.map(r => {
+      // status label
+      let status_label = r.status;
+      if (r.has_sample_collected) status_label = 'sample_collected';
+      else if (r.status === 'booked') status_label = 'confirmed';
+      // estimated completion
+      let estimated_completion = null;
+      try {
+        if (r.appointment_date && r.appointment_time) {
+          const dateStr = typeof r.appointment_date === 'string' ? r.appointment_date : new Date(r.appointment_date).toISOString().slice(0,10);
+          const timeStr = String(r.appointment_time).slice(0,8);
+          const dt = new Date(`${dateStr}T${timeStr}`);
+          const addHours = Number(r.report_time_hours ?? r.duration_hours ?? 24);
+          if (!isNaN(dt) && !isNaN(addHours)) {
+            dt.setHours(dt.getHours() + addHours);
+            estimated_completion = dt.toISOString();
+          }
+        }
+      } catch {}
+
+      return { ...r, status_label, estimated_completion };
+    });
+
+    res.json(rows);
   } catch (err) {
     next(err);
   }

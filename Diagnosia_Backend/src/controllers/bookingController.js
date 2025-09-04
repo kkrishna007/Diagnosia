@@ -109,12 +109,27 @@ export const getBookingById = async (req, res, next) => {
 export const deleteBooking = async (req, res, next) => {
   try {
     const { id } = req.params;
-    await pool.query(
-      `UPDATE appointments SET status = 'cancelled', cancelled_by = $1, cancelled_at = NOW() WHERE appointment_id = $2 AND patient_id = $1`,
+    // Use a transaction to update appointment and related tests
+    await pool.query('BEGIN');
+    const result = await pool.query(
+      `UPDATE appointments 
+         SET status = 'cancelled', cancelled_by = $1, cancelled_at = NOW() 
+       WHERE appointment_id = $2 AND patient_id = $1 
+       RETURNING appointment_id`,
       [req.user.user_id, id]
     );
+    if (result.rowCount === 0) {
+      await pool.query('ROLLBACK');
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+    await pool.query(
+      `UPDATE appointment_tests SET status = 'cancelled' WHERE appointment_id = $1`,
+      [id]
+    );
+    await pool.query('COMMIT');
     res.json({ message: 'Booking cancelled' });
   } catch (err) {
+    try { await pool.query('ROLLBACK'); } catch {}
     next(err);
   }
 };

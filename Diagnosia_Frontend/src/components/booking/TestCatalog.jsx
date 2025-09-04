@@ -40,7 +40,7 @@ const TestCatalog = ({ onTestSelect }) => {
     try {
       setLoading(true);
       const response = await apiService.tests.getAll();
-      setTests(response.data);
+      setTests(response.data || []);
     } catch (err) {
       setError('Failed to load tests. Please try again.');
       console.error('Error fetching tests:', err);
@@ -52,7 +52,19 @@ const TestCatalog = ({ onTestSelect }) => {
   const fetchCategories = async () => {
     try {
       const response = await apiService.tests.getCategories();
-      setCategories([{ value: 'all', label: 'All Tests' }, ...response.data.map(cat => ({ value: cat, label: cat.charAt(0).toUpperCase() + cat.slice(1) + ' Tests' }))]);
+      const rows = Array.isArray(response.data) ? response.data : [];
+      // Map backend objects -> { value: 'blood', label: 'Blood Tests' }
+      const mapped = rows
+        .map((c) => c.category_name)
+        .filter(Boolean)
+        .map((name) => {
+          const value = String(name).toLowerCase();
+          const label = `${name.charAt(0).toUpperCase()}${name.slice(1)} Tests`;
+          return { value, label };
+        });
+      // de-duplicate by value
+      const unique = Array.from(new Map(mapped.map((m) => [m.value, m])).values());
+      setCategories([{ value: 'all', label: 'All Tests' }, ...unique]);
     } catch (err) {
       // fallback to default
     }
@@ -63,26 +75,36 @@ const TestCatalog = ({ onTestSelect }) => {
 
     // Search filter
     if (searchTerm) {
-      filtered = filtered.filter(test =>
-        test.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        test.description.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      const q = searchTerm.toLowerCase();
+      filtered = filtered.filter((test) => {
+        const name = (test.test_name || test.name || '').toLowerCase();
+        const desc = (test.test_description || test.description || '').toLowerCase();
+        return name.includes(q) || desc.includes(q);
+      });
     }
 
     // Category filter
     if (selectedCategory !== 'all') {
-      filtered = filtered.filter(test => test.category === selectedCategory);
+      filtered = filtered.filter((test) => {
+        const cat = (test.category_name || test.category || '').toLowerCase();
+        return cat === selectedCategory;
+      });
     }
 
     // Price filter
     if (priceRange !== 'all') {
-      const [min, max] = priceRange.split('-').map(p => parseInt(p) || Infinity);
-      filtered = filtered.filter(test => {
-        if (priceRange === '2000+') {
-          return test.price >= 2000;
-        }
-        return test.price >= min && test.price < max;
-      });
+      const priceOf = (t) => Number(t.base_price ?? t.price ?? 0);
+      if (priceRange === '2000+') {
+        filtered = filtered.filter((t) => priceOf(t) >= 2000);
+      } else {
+        const [min, maxStr] = priceRange.split('-');
+        const minVal = parseInt(min, 10) || 0;
+        const maxVal = parseInt(maxStr, 10) || Infinity;
+        filtered = filtered.filter((t) => {
+          const p = priceOf(t);
+          return p >= minVal && p < maxVal;
+        });
+      }
     }
 
     setFilteredTests(filtered);

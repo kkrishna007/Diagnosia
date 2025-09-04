@@ -77,6 +77,11 @@ const UserDashboard = () => {
         apiService.users.getProfile().catch(() => null),
       ]);
       const upcomingAppointments = appointmentsRes.data || [];
+      // Exclude cancelled from the upcoming count
+      const activeAppointments = upcomingAppointments.filter((a) => {
+        const status = (a.status_label || a.status || '').toString().toLowerCase();
+        return status !== 'cancelled';
+      });
       const recentResults = resultsRes.data || [];
       if (profileRes?.data) {
         // Keep global auth user in sync with latest profile
@@ -86,12 +91,12 @@ const UserDashboard = () => {
         upcomingAppointments,
         recentResults,
         pendingReports: [], // You can add logic to filter pending reports from results if needed
-        stats: {
-          totalTests: recentResults.length,
-          pendingAppointments: upcomingAppointments.length,
-          completedTests: recentResults.length,
-          pendingReports: 0,
-        }
+    stats: {
+      pendingAppointments: activeAppointments.length,
+      completedTests: recentResults.length,
+      pendingReports: 0,
+      totalTests: activeAppointments.length + recentResults.length + 0, // 0 for pendingReports, update when logic added
+    }
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);

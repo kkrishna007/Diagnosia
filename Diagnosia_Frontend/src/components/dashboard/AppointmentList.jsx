@@ -4,6 +4,7 @@ import { format, isValid } from 'date-fns';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import { apiService } from '../../services/api';
 
 const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
@@ -62,6 +63,7 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
 
   const timeSlotLabel = (ts) => {
     if (!ts) return '-';
+    // Recognize stored ranges
     const map = {
       '6-8': '6:00 AM - 8:00 AM',
       '8-10': '8:00 AM - 10:00 AM',
@@ -71,7 +73,14 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
       '16-18': '4:00 PM - 6:00 PM',
       '18-20': '6:00 PM - 8:00 PM',
     };
-    return map[ts] || ts;
+    if (map[ts]) return map[ts];
+    // If it's a full time like HH:mm:ss, format to h:mm a
+    try {
+      // Construct a date to format the time
+      const d = new Date(`1970-01-01T${String(ts).slice(0,8)}`);
+      if (isValid(d)) return format(d, 'h:mm a');
+    } catch {}
+    return ts;
   };
 
   const normalizeAppointment = (item) => {
@@ -80,19 +89,23 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
     return {
       ...item,
       id: item?.id ?? item?.appointment_id ?? item?.appointmentId ?? item?.bookingId,
+      appointmentId: item?.appointment_id ?? item?.id ?? item?.appointmentId,
       bookingId: item?.bookingId ?? item?.id ?? item?.appointment_id ?? item?.appointmentId ?? item?.reference_code,
       testName: item?.testName ?? item?.test_name ?? item?.name ?? item?.test?.name ?? 'Lab Test',
-      status: (item?.status ?? item?.appointment_status ?? 'confirmed')?.toLowerCase?.() || 'confirmed',
+      appointmentType: item?.appointment_type || item?.type || 'lab_visit',
+      status: (item?.status_label ?? item?.status ?? item?.appointment_status ?? 'confirmed')?.toLowerCase?.() || 'confirmed',
       date: dateRaw || null,
       dateObj: safeParseDate(dateRaw),
       timeSlot: timeSlotLabel(timeRaw),
+      estimatedCompletion: item?.estimated_completion || item?.estimatedCompletion || null,
     };
   };
 
   const handleCancelAppointment = async () => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!selectedAppointment?.appointmentId && !selectedAppointment?.id) throw new Error('Missing appointment id');
+      const id = selectedAppointment?.appointmentId || selectedAppointment?.id;
+      await apiService.bookings.cancel(id);
       setShowCancelModal(false);
       setSelectedAppointment(null);
       if (onRefresh) onRefresh();
@@ -188,8 +201,29 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
                         <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
                         <div className="text-sm text-green-800">
                           <p className="font-medium">Your appointment is confirmed!</p>
-                          <p>Our phlebotomist will arrive at your scheduled time.</p>
+                          {item.appointmentType === 'home_collection' ? (
+                            <p>Our phlebotomist will arrive at your scheduled time.</p>
+                          ) : (
+                            <p>Please reach the lab a few minutes before your scheduled time.</p>
+                          )}
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {item.status === 'sample_collected' && (
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                      <div className="text-sm text-blue-800">
+                        <p className="font-medium">Sample collected</p>
+                        {item.estimatedCompletion && (
+                          <p>
+                            <strong>Estimated completion:</strong>{' '}
+                            {(() => {
+                              const d = safeParseDate(item.estimatedCompletion);
+                              return d ? `${format(d, 'MMM d, yyyy')} • ${format(d, 'h:mm a')}` : '-';
+                            })()}
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
