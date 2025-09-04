@@ -1,21 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { CheckCircle, Calendar, MapPin, Clock, Download, Share2, Home } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
+import { generateBookingReceipt } from '../../utils/pdf';
 
 const BookingConfirmation = ({ bookingData }) => {
   const { test, booking } = bookingData;
-  const [showGlow, setShowGlow] = useState(true);
-
-  useEffect(() => {
-    // Subtle success glow
-    const t1 = setTimeout(() => setShowGlow(false), 1200);
-    return () => {
-      clearTimeout(t1);
-    };
-  }, []);
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('en-IN', {
@@ -42,9 +34,13 @@ const BookingConfirmation = ({ bookingData }) => {
     return timeSlots[timeSlotId] || timeSlotId;
   };
 
-  const handleDownloadReceipt = () => {
-    // Simulate download functionality
-    console.log('Downloading receipt for booking:', booking.bookingId);
+  const handleDownloadReceipt = async () => {
+    try {
+      await generateBookingReceipt({ booking, test });
+    } catch (e) {
+      console.error('Failed to generate receipt:', e);
+      alert('Failed to generate receipt. Please try again.');
+    }
   };
 
   const handleShareBooking = () => {
@@ -75,10 +71,10 @@ const BookingConfirmation = ({ bookingData }) => {
   const appointmentTypeLabel = booking?.appointmentType === 'home_collection' ? 'Home Collection' : 'Lab Visit';
 
   return (
-  <div className={`max-w-2xl mx-auto space-y-6 transition-shadow ${showGlow ? 'shadow-[0_0_0_4px_rgba(34,197,94,0.2)] rounded-xl' : ''}`}>
+  <div className="max-w-2xl mx-auto space-y-6 transition-shadow">
       {/* Success Header */}
-      <div className="text-center py-8">
-  <div className={`mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 ${showGlow ? 'animate-pulse' : ''}`}>
+    <div className="text-center py-8">
+  <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
           <CheckCircle className="h-10 w-10 text-green-600" />
         </div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Booking Confirmed!</h1>
