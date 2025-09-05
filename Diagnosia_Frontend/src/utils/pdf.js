@@ -15,14 +15,23 @@ async function ensureUnicodeFont(doc) {
   if (UNICODE_FONT_READY) return true;
   let base = '/';
   try { base = (import.meta && import.meta.env && import.meta.env.BASE_URL) || '/'; } catch {}
-  // Try only the local Roboto variable fonts you added
+  // Try local Roboto variable fonts via multiple robust URL candidates
   const b = String(base).replace(/\/$/, '');
-  const candidates = [
-    '/fonts/Roboto-VariableFont_wdth,wght.ttf',
-    `${b}/fonts/Roboto-VariableFont_wdth,wght.ttf`,
-    '/fonts/Roboto-Italic-VariableFont_wdth,wght.ttf',
-    `${b}/fonts/Roboto-Italic-VariableFont_wdth,wght.ttf`,
+  const origin = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+  const fontFiles = [
+    'Roboto-VariableFont_wdth,wght.ttf',
+    'Roboto-Italic-VariableFont_wdth,wght.ttf',
   ];
+  const candidates = [];
+  for (const file of fontFiles) {
+    // Absolute from root and base-prefixed
+    candidates.push(`/fonts/${file}`);
+    if (b) candidates.push(`${b}/fonts/${file}`);
+    // Absolute with origin
+    if (origin) candidates.push(`${origin}/fonts/${file}`);
+    // Relative (in case app is served from nested path without base)
+    candidates.push(`fonts/${file}`);
+  }
   for (const url of candidates) {
     try {
       const res = await fetch(url, { credentials: 'same-origin' });
@@ -47,8 +56,8 @@ async function ensureUnicodeFont(doc) {
   }
   // If we got here, all sources failed — log once to help diagnose
   try {
-    // eslint-disable-next-line no-console
-    console.warn('[pdf] Unicode font load failed. Receipt will use "INR" instead of ₹. Place Roboto-VariableFont_wdth,wght.ttf in public/fonts.');
+  // eslint-disable-next-line no-console
+  console.warn('[pdf] Unicode font load failed. Falling back to "INR". Ensure /public/fonts/Roboto-VariableFont_wdth,wght.ttf is served at /fonts and matches your BASE_URL.');
   } catch {}
   return false;
 }

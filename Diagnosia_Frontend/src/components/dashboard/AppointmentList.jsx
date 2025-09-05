@@ -6,11 +6,13 @@ import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import { apiService } from '../../services/api';
 import TimeSlotPicker from '../booking/TimeSlotPicker';
+import AppointmentDetailsModal from './AppointmentDetailsModal';
 
 const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -77,13 +79,13 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
     if (map[ts]) return map[ts];
     // If it's a full time like HH:mm:ss, format to h:mm a
     try {
-      // Construct a date to format the time
       const d = new Date(`1970-01-01T${String(ts).slice(0,8)}`);
       if (isValid(d)) return format(d, 'h:mm a');
     } catch {}
     return ts;
   };
 
+  // Normalize various backend shapes into a consistent appointment object
   const normalizeAppointment = (item) => {
     const dateRaw = item?.date || item?.appointment_date || item?.collection_date || item?.scheduled_for || item?.created_at;
     const timeRaw = item?.timeSlot || item?.appointment_time || item?.time || item?.slot || item?.time_slot;
@@ -202,7 +204,21 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
           {allAppointments.map((item, idx) => (
             <Card key={`${item.type}-${item.bookingId || item.id || idx}`} className="p-6">
               <div className="flex items-start justify-between">
-                <div className="flex-1">
+                <div
+                  className="flex-1 cursor-pointer"
+                  onClick={() => {
+                    setSelectedAppointment(item);
+                    setShowDetailsModal(true);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setSelectedAppointment(item);
+                      setShowDetailsModal(true);
+                    }
+                  }}
+                >
                   <div className="flex items-center space-x-3 mb-2">
                     <h3 className="text-lg font-semibold text-gray-900">{item.testName}</h3>
                     {getStatusBadge(item.status)}
@@ -315,29 +331,31 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
         onClose={() => setShowCancelModal(false)}
         title="Cancel Appointment"
       >
-        <div className="space-y-4">
-          <p className="text-gray-600">
-            Are you sure you want to cancel your appointment for{' '}
-            <strong>{selectedAppointment?.testName}</strong>?
-          </p>
-          <p className="text-sm text-gray-500">
-            This action cannot be undone. You'll need to book a new appointment if you want to take this test.
-          </p>
-          <div className="flex justify-end space-x-3 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setShowCancelModal(false)}
-            >
-              Keep Appointment
-            </Button>
-            <Button
-              onClick={handleCancelAppointment}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Cancel Appointment
-            </Button>
+        <Modal.Body>
+          <div className="space-y-4">
+            <p className="text-gray-600">
+              Are you sure you want to cancel your appointment for{' '}
+              <strong>{selectedAppointment?.testName}</strong>?
+            </p>
+            <p className="text-sm text-gray-500">
+              This action cannot be undone. You'll need to book a new appointment if you want to take this test.
+            </p>
           </div>
-        </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline"
+            onClick={() => setShowCancelModal(false)}
+          >
+            Keep Appointment
+          </Button>
+          <Button
+            onClick={handleCancelAppointment}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            Cancel Appointment
+          </Button>
+        </Modal.Footer>
       </Modal>
 
       {/* Reschedule Modal */}
@@ -346,39 +364,47 @@ const AppointmentList = ({ appointments, pendingReports, onRefresh }) => {
         onClose={() => setShowRescheduleModal(false)}
         title="Reschedule Appointment"
       >
-        <div className="space-y-4">
-          <p className="text-gray-600">
-            Choose a new date and time slot for <strong>{selectedAppointment?.testName}</strong>.
-          </p>
-          {/* Reuse booking TimeSlotPicker */}
-          <div className="border rounded-lg p-3">
-            <TimeSlotPicker
-              onTimeSlotSelect={handleTimeSlotSelect}
-              selectedDate={rescheduleDate}
-              selectedTimeSlot={rescheduleSlot}
-            />
+        <Modal.Body>
+          <div className="space-y-4">
+            <p className="text-gray-600">
+              Choose a new date and time slot for <strong>{selectedAppointment?.testName}</strong>.
+            </p>
+            <div className="border rounded-lg p-3">
+              <TimeSlotPicker
+                onTimeSlotSelect={handleTimeSlotSelect}
+                selectedDate={rescheduleDate}
+                selectedTimeSlot={rescheduleSlot}
+              />
+            </div>
+            {rescheduleError && (
+              <div className="text-sm text-red-600">{rescheduleError}</div>
+            )}
           </div>
-          {rescheduleError && (
-            <div className="text-sm text-red-600">{rescheduleError}</div>
-          )}
-          <div className="flex justify-end space-x-3 pt-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowRescheduleModal(false);
-                setRescheduleDate('');
-                setRescheduleSlot('');
-                setRescheduleError('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleRescheduleAppointment} disabled={rescheduleLoading || !rescheduleDate || !rescheduleSlot}>
-              {rescheduleLoading ? 'Rescheduling...' : 'Confirm Reschedule'}
-            </Button>
-          </div>
-        </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowRescheduleModal(false);
+              setRescheduleDate('');
+              setRescheduleSlot('');
+              setRescheduleError('');
+            }}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleRescheduleAppointment} disabled={rescheduleLoading || !rescheduleDate || !rescheduleSlot}>
+            {rescheduleLoading ? 'Rescheduling...' : 'Confirm Reschedule'}
+          </Button>
+        </Modal.Footer>
       </Modal>
+
+      {/* Appointment Details Modal */}
+      <AppointmentDetailsModal
+        isOpen={showDetailsModal}
+        onClose={() => setShowDetailsModal(false)}
+        appointment={selectedAppointment}
+      />
     </div>
   );
 };
