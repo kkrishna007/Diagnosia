@@ -9,6 +9,8 @@ import chatbotRoutes from './routes/chatbot.js';
 import notificationRoutes from './routes/notifications.js';
 import paymentRoutes from './routes/payments.js';
 import reportRoutes from './routes/reports.js';
+import employeeAuthRoutes from './routes/employeeAuth.js';
+import employeeRoutes from './routes/employee.js';
 import errorHandler from './middleware/errorHandler.js';
 
 dotenv.config();
@@ -23,6 +25,8 @@ app.use('/api/tests', testRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/employee/auth', employeeAuthRoutes);
+app.use('/api/employee', employeeRoutes);
 
 app.use('/api/payments', paymentRoutes);
 app.use('/api/reports', reportRoutes);

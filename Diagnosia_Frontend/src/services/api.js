@@ -14,9 +14,11 @@ const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // If an Authorization header is already present (e.g. employee_token passed explicitly), don't overwrite it
+    if (!config.headers) config.headers = {};
+    if (!config.headers.Authorization) {
+      const token = localStorage.getItem('token');
+      if (token) config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -32,9 +34,27 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Token expired or invalid - route to employee login if the request was to an employee API
+      try {
+        const base = error.config?.baseURL || '';
+        const url = error.config?.url || '';
+        const full = `${base}${url}`.toLowerCase();
+        if (full.includes('/employee/')) {
+          localStorage.removeItem('employee_token');
+          // if the failing request was to admin endpoints, redirect to admin login
+          if (full.includes('/employee/admin/')) {
+            window.location.href = '/admin/login';
+          } else {
+            window.location.href = '/employee/login';
+          }
+        } else {
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+        }
+      } catch (e) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
     
     if (error.response?.status === 500) {
@@ -77,7 +97,6 @@ export const apiService = {
     getById: (id) => api.get(`/bookings/${id}`),
     update: (id, data) => api.put(`/bookings/${id}`, data),
     cancel: (id) => api.delete(`/bookings/${id}`),
-  reschedule: (id, data) => api.patch(`/bookings/${id}/reschedule`, data),
     getAvailableSlots: (date, testId) => 
       api.get(`/bookings/slots?date=${date}&testId=${testId}`),
   },
@@ -93,6 +112,31 @@ export const apiService = {
   chatbot: {
     sendMessage: (message) => api.post('/chatbot/message', { message }),
     getFAQs: () => api.get('/chatbot/faqs'),
+  },
+
+  // Employee endpoints
+  employeeAuth: {
+  login: (payload) => api.post('/employee/auth/login', payload),
+  loginAdmin: (payload) => api.post('/employee/auth/admin/login', payload),
+  },
+  employee: {
+    // helper to include employee token from localStorage
+    getCollectorTasks: () => {
+      const token = localStorage.getItem('employee_token');
+      return api.get('/employee/collector/tasks', { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    getLabWorklist: () => {
+      const token = localStorage.getItem('employee_token');
+      return api.get('/employee/lab/worklist', { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    getAdminOverview: () => {
+      const token = localStorage.getItem('employee_token');
+      return api.get('/employee/admin/overview', { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    createUser: (data) => {
+      const token = localStorage.getItem('employee_token');
+      return api.post('/employee/admin/users', data, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
   },
 };
 
