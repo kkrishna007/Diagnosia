@@ -5,8 +5,9 @@ export const EmployeeAuthContext = createContext(null);
 export const EmployeeAuthProvider = ({ children }) => {
   const [state, setState] = useState(() => {
     const token = localStorage.getItem('employee_token');
-    const user = localStorage.getItem('employee_user');
-    return token && user ? { token, user: JSON.parse(user) } : null;
+    const userRaw = localStorage.getItem('employee_user');
+    const user = userRaw && userRaw !== 'null' && userRaw !== 'undefined' ? JSON.parse(userRaw) : null;
+    return token && user ? { token, user } : null;
   });
 
   const login = async (emailOrPhone, password) => {

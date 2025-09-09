@@ -18,7 +18,18 @@ dotenv.config();
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+// Accept JSON primitives (e.g. `null`) without throwing and normalize null bodies to {}
+app.use(express.json({ strict: false }));
+app.use((req, res, next) => {
+  try {
+    if (req.headers['content-type'] && req.headers['content-type'].includes('application/json') && req.body === null) {
+      req.body = {};
+    }
+  } catch (e) {
+    // ignore
+  }
+  return next();
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tests', testRoutes);

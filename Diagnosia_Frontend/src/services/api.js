@@ -125,6 +125,14 @@ export const apiService = {
       const token = localStorage.getItem('employee_token');
       return api.get('/employee/collector/tasks', { headers: { Authorization: token ? `Bearer ${token}` : '' } });
     },
+    assignTask: (taskId) => {
+      const token = localStorage.getItem('employee_token');
+  return api.post(`/employee/collector/tasks/${taskId}/assign`, {}, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    collectTask: (taskId) => {
+      const token = localStorage.getItem('employee_token');
+  return api.post(`/employee/collector/tasks/${taskId}/collect`, {}, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
     getLabWorklist: () => {
       const token = localStorage.getItem('employee_token');
       return api.get('/employee/lab/worklist', { headers: { Authorization: token ? `Bearer ${token}` : '' } });
@@ -136,6 +144,26 @@ export const apiService = {
     createUser: (data) => {
       const token = localStorage.getItem('employee_token');
       return api.post('/employee/admin/users', data, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    listUsers: () => {
+      const token = localStorage.getItem('employee_token');
+      return api.get('/employee/admin/users', { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    updateUser: (id, data) => {
+      const token = localStorage.getItem('employee_token');
+      return api.put(`/employee/admin/users/${id}`, data, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    deleteUser: (id) => {
+      const token = localStorage.getItem('employee_token');
+      return api.delete(`/employee/admin/users/${id}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    getUserDependents: (id) => {
+      const token = localStorage.getItem('employee_token');
+      return api.get(`/employee/admin/users/${id}/dependents`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    forceDeleteUser: (id) => {
+      const token = localStorage.getItem('employee_token');
+  return api.post(`/employee/admin/users/${id}/force-delete`, {}, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
     },
   },
 };

@@ -100,7 +100,8 @@ export const storage = {
   get: (key, defaultValue = null) => {
     try {
       const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue;
+  if (!item || item === 'null' || item === 'undefined') return defaultValue;
+  return JSON.parse(item);
     } catch (error) {
       console.error('Error reading from localStorage:', error);
       return defaultValue;
