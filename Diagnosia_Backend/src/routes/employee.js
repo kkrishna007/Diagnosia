@@ -12,18 +12,9 @@ router.get('/collector/tasks', authEmployee, requireRoles('sample_collector', 'a
     const userId = req.user.user_id;
     const isAdmin = (req.user.roles || []).includes('admin');
 
-    // If requester is admin, return all tasks. Otherwise scope by user's collector_type and appointment_type
-    if (isAdmin) {
-      const q = `
-        SELECT ct.*, at.test_code, at.patient_name, at.patient_age, at.patient_gender, a.appointment_date, a.appointment_time, a.appointment_type
-        FROM collection_tasks ct
-        JOIN appointment_tests at ON ct.appointment_test_id = at.appointment_test_id
-        JOIN appointments a ON ct.appointment_id = a.appointment_id
-        ORDER BY ct.scheduled_at NULLS LAST, ct.created_at DESC
-      `;
-      const r = await pool.query(q);
-      return res.json(r.rows);
-    }
+    // Check if collection_tasks table exists
+    const tasksTblCheck = await pool.query("SELECT to_regclass('public.collection_tasks') AS reg");
+    const hasCollectionTasks = tasksTblCheck.rows[0] && tasksTblCheck.rows[0].reg;
 
     // Get collector_type of requesting user from collectors table if it exists (some migrations optional)
     let collectorType = 'both';
@@ -33,21 +24,109 @@ router.get('/collector/tasks', authEmployee, requireRoles('sample_collector', 'a
       collectorType = ures.rows[0]?.collector_type || 'both';
     }
 
-    // Map collector_type to appointment_type filter
-    let appointmentTypeFilter = '';
-    if (collectorType === 'home_collection') appointmentTypeFilter = "WHERE a.appointment_type = 'home_collection'";
-    else if (collectorType === 'lab_visit') appointmentTypeFilter = "WHERE a.appointment_type = 'lab_visit'";
+    // If collection_tasks table exists, use it as before
+    if (hasCollectionTasks) {
+      if (isAdmin) {
+        const q = `
+          SELECT ct.*, at.test_code, at.patient_name, at.patient_age, at.patient_gender, a.appointment_date, a.appointment_time, a.appointment_type
+          FROM collection_tasks ct
+          JOIN appointment_tests at ON ct.appointment_test_id = at.appointment_test_id
+          JOIN appointments a ON ct.appointment_id = a.appointment_id
+          ORDER BY ct.scheduled_at NULLS LAST, ct.created_at DESC
+        `;
+        const r = await pool.query(q);
+        return res.json(r.rows);
+      }
 
-    const q2 = `
-      SELECT ct.*, at.test_code, at.patient_name, at.patient_age, at.patient_gender, a.appointment_date, a.appointment_time, a.appointment_type
-      FROM collection_tasks ct
-      JOIN appointment_tests at ON ct.appointment_test_id = at.appointment_test_id
-      JOIN appointments a ON ct.appointment_id = a.appointment_id
-      ${appointmentTypeFilter}
-      ORDER BY ct.scheduled_at NULLS LAST, ct.created_at DESC
-    `;
-    const r2 = await pool.query(q2);
-    return res.json(r2.rows);
+      // Map collector_type to appointment_type filter
+      let appointmentTypeFilter = '';
+      if (collectorType === 'home_collection') appointmentTypeFilter = "WHERE a.appointment_type = 'home_collection'";
+      else if (collectorType === 'lab_visit') appointmentTypeFilter = "WHERE a.appointment_type = 'lab_visit'";
+
+      const q2 = `
+        SELECT ct.*, at.test_code, at.patient_name, at.patient_age, at.patient_gender, a.appointment_date, a.appointment_time, a.appointment_type
+        FROM collection_tasks ct
+        JOIN appointment_tests at ON ct.appointment_test_id = at.appointment_test_id
+        JOIN appointments a ON ct.appointment_id = a.appointment_id
+        ${appointmentTypeFilter}
+        ORDER BY ct.scheduled_at NULLS LAST, ct.created_at DESC
+      `;
+      const r2 = await pool.query(q2);
+      return res.json(r2.rows);
+    } else {
+      // Fallback: show appointments with patient and test details, filtered by collector type
+      let appointmentTypeFilter = '';
+      if (collectorType === 'home_collection') appointmentTypeFilter = "WHERE a.appointment_type = 'home_collection'";
+      else if (collectorType === 'lab_visit') appointmentTypeFilter = "WHERE a.appointment_type = 'lab_visit'";
+
+      const q3 = `
+        SELECT
+          a.appointment_id,
+          a.appointment_date,
+          a.appointment_time,
+          a.appointment_type,
+          a.status AS appointment_status,
+          a.special_instructions,
+          a.cancellation_reason,
+          a.cancelled_by,
+          a.cancelled_at,
+          a.rescheduled_from,
+          a.rescheduled_reason,
+          a.total_amount,
+          u.user_id AS patient_id,
+          COALESCE(at.patient_name, u.first_name || ' ' || u.last_name) AS patient_name,
+          u.phone AS patient_phone,
+          u.email AS patient_email,
+          u.gender AS patient_gender,
+          u.date_of_birth AS patient_dob,
+          addr.address AS collection_address,
+          at.appointment_test_id,
+          at.test_code,
+          t.test_name,
+          at.test_price,
+          at.status AS test_status,
+          at.patient_age AS test_patient_age,
+          at.patient_gender AS test_patient_gender
+        FROM appointments a
+        JOIN users u ON a.patient_id = u.user_id
+        LEFT JOIN user_addresses addr ON a.collection_address_id = addr.address_id
+        LEFT JOIN appointment_tests at ON at.appointment_id = a.appointment_id
+        LEFT JOIN tests t ON t.test_code = at.test_code
+        ${appointmentTypeFilter}
+        ORDER BY a.appointment_date DESC, a.appointment_time DESC, at.appointment_test_id ASC
+      `;
+      const r3 = await pool.query(q3);
+      // If no appointment_tests, still return appointment and patient details
+      const results = r3.rows.map(row => ({
+        appointment_id: row.appointment_id,
+        appointment_date: row.appointment_date,
+        appointment_time: row.appointment_time,
+        appointment_type: row.appointment_type,
+        appointment_status: row.appointment_status,
+        special_instructions: row.special_instructions,
+        cancellation_reason: row.cancellation_reason,
+        cancelled_by: row.cancelled_by,
+        cancelled_at: row.cancelled_at,
+        rescheduled_from: row.rescheduled_from,
+        rescheduled_reason: row.rescheduled_reason,
+        total_amount: row.total_amount,
+        patient_id: row.patient_id,
+        patient_name: row.patient_name,
+        patient_phone: row.patient_phone,
+        patient_email: row.patient_email,
+        patient_gender: row.patient_gender,
+        patient_dob: row.patient_dob,
+        collection_address: row.collection_address,
+        appointment_test_id: row.appointment_test_id,
+        test_code: row.test_code,
+        test_name: row.test_name,
+        test_price: row.test_price,
+        test_status: row.test_status,
+        test_patient_age: row.test_patient_age,
+        test_patient_gender: row.test_patient_gender
+      }));
+      return res.json(results);
+    }
   } catch (err) {
     next(err);
   }
@@ -76,33 +155,55 @@ router.post('/collector/tasks/:taskId/collect', authEmployee, requireRoles('samp
   try {
     const taskId = parseInt(req.params.taskId, 10);
     const userId = req.user.user_id;
-
-    // Fetch task
-    const taskRes = await pool.query('SELECT * FROM collection_tasks WHERE task_id = $1', [taskId]);
-    if (taskRes.rows.length === 0) return res.status(404).json({ message: 'Task not found' });
-    const task = taskRes.rows[0];
-
-    // Simple permission: allow only assigned collector or admin to mark collected
-    const isAdmin = (req.user.roles || []).includes('admin');
-    if (!isAdmin && task.collector_id && task.collector_id !== userId) {
-      return res.status(403).json({ message: 'Task assigned to another collector' });
+    // Check if collection_tasks table exists
+    const tasksTblCheck = await pool.query("SELECT to_regclass('public.collection_tasks') AS reg");
+    const hasCollectionTasks = tasksTblCheck.rows[0] && tasksTblCheck.rows[0].reg;
+    if (hasCollectionTasks) {
+      // Fetch task from collection_tasks
+      const taskRes = await pool.query('SELECT * FROM collection_tasks WHERE task_id = $1', [taskId]);
+      if (taskRes.rows.length === 0) return res.status(404).json({ message: 'Task not found' });
+      const task = taskRes.rows[0];
+      // Simple permission: allow only assigned collector or admin to mark collected
+      const isAdmin = (req.user.roles || []).includes('admin');
+      if (!isAdmin && task.collector_id && task.collector_id !== userId) {
+        return res.status(403).json({ message: 'Task assigned to another collector' });
+      }
+      // Create sample row
+      const sampleCode = `SMP-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+      const insertSample = await pool.query(
+        `INSERT INTO samples (sample_code, appointment_test_id, collected_by, collected_at, collection_method, status)
+         VALUES ($1, $2, $3, NOW(), $4, $5) RETURNING sample_id, sample_code, collected_at`,
+        [sampleCode, task.appointment_test_id, userId, task.collection_method || null, 'collected']
+      );
+      // Update appointment_test status (mark sample collected)
+      await pool.query('UPDATE appointment_tests SET status = $1 WHERE appointment_test_id = $2', ['sample_collected', task.appointment_test_id]);
+      // Also mark the parent appointment as sample_collected so patient-facing status updates
+      if (task.appointment_id) {
+        await pool.query('UPDATE appointments SET status = $1 WHERE appointment_id = $2', ['sample_collected', task.appointment_id]);
+      }
+      // Update task
+      await pool.query('UPDATE collection_tasks SET status = $1, collected_at = NOW(), collector_id = COALESCE(collector_id, $2) WHERE task_id = $3', ['collected', userId, taskId]);
+      return res.json({ ok: true, sample: insertSample.rows[0] });
+    } else {
+      // Fallback: treat taskId as appointment_test_id
+      const testRes = await pool.query('SELECT * FROM appointment_tests WHERE appointment_test_id = $1', [taskId]);
+      if (testRes.rows.length === 0) return res.status(404).json({ message: 'Test not found' });
+      const test = testRes.rows[0];
+      // Create sample row
+      const sampleCode = `SMP-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+      const insertSample = await pool.query(
+        `INSERT INTO samples (sample_code, appointment_test_id, collected_by, collected_at, collection_method, status)
+         VALUES ($1, $2, $3, NOW(), $4, $5) RETURNING sample_id, sample_code, collected_at`,
+        [sampleCode, test.appointment_test_id, userId, null, 'collected']
+      );
+      // Update appointment_test status (mark sample collected)
+      await pool.query('UPDATE appointment_tests SET status = $1 WHERE appointment_test_id = $2', ['sample_collected', test.appointment_test_id]);
+      // Also update the parent appointment status
+      if (test.appointment_id) {
+        await pool.query('UPDATE appointments SET status = $1 WHERE appointment_id = $2', ['sample_collected', test.appointment_id]);
+      }
+      return res.json({ ok: true, sample: insertSample.rows[0] });
     }
-
-    // Create sample row
-    const sampleCode = `SMP-${Date.now()}-${Math.floor(Math.random()*1000)}`;
-    const insertSample = await pool.query(
-      `INSERT INTO samples (sample_code, appointment_test_id, collected_by, collected_at, collection_method, status, created_at)
-       VALUES ($1, $2, $3, NOW(), $4, $5, NOW()) RETURNING sample_id, sample_code, collected_at`,
-      [sampleCode, task.appointment_test_id, userId, task.collection_method || null, 'collected']
-    );
-
-    // Update appointment_test status
-    await pool.query('UPDATE appointment_tests SET status = $1 WHERE appointment_test_id = $2', ['collected', task.appointment_test_id]);
-
-    // Update task
-    await pool.query('UPDATE collection_tasks SET status = $1, collected_at = NOW(), collector_id = COALESCE(collector_id, $2) WHERE task_id = $3', ['collected', userId, taskId]);
-
-    return res.json({ ok: true, sample: insertSample.rows[0] });
   } catch (err) {
     next(err);
   }

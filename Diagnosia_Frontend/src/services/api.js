@@ -17,7 +17,8 @@ api.interceptors.request.use(
     // If an Authorization header is already present (e.g. employee_token passed explicitly), don't overwrite it
     if (!config.headers) config.headers = {};
     if (!config.headers.Authorization) {
-      const token = localStorage.getItem('token');
+      // prefer the regular user token, fall back to employee token when present
+      const token = localStorage.getItem('token') || localStorage.getItem('employee_token');
       if (token) config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
