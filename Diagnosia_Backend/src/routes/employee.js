@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import pool from '../../config/db.js';
 import { authEmployee, requireRoles } from '../middleware/employeeAuth.js';
+import * as labController from '../controllers/labController.js';
 
 const router = express.Router();
 
@@ -209,10 +210,11 @@ router.post('/collector/tasks/:taskId/collect', authEmployee, requireRoles('samp
   }
 });
 
-// Lab Technician worklist
-router.get('/lab/worklist', authEmployee, requireRoles('lab_technician', 'lab_manager', 'admin'), async (req, res) => {
-  res.json([]);
-});
+// Lab Technician worklist and lab endpoints
+router.get('/lab/worklist', authEmployee, requireRoles('lab_technician', 'lab_manager', 'admin'), labController.getWorklist);
+router.get('/lab/panels/:test_code', authEmployee, requireRoles('lab_technician', 'lab_manager', 'admin'), labController.getPanel);
+router.post('/lab/results', authEmployee, requireRoles('lab_technician', 'lab_manager', 'admin'), labController.saveResult);
+router.get('/lab/results/:appointment_test_id', authEmployee, requireRoles('lab_technician', 'lab_manager', 'admin'), labController.getResult);
 
 // Admin overview
 router.get('/admin/overview', authEmployee, requireRoles('admin'), async (req, res) => {

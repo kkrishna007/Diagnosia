@@ -5,22 +5,36 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/input';
 import Modal from '../ui/Modal';
+import { useAuth } from '../../hooks/useAuth';
 
 const TestResults = ({ results, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedResult, setSelectedResult] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
 
-  const filteredResults = results.filter(result =>
-    result.testName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    result.bookingId.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Be defensive: results may be undefined or contain unexpected shapes coming from the API.
+  const filteredResults = Array.isArray(results)
+    ? results.filter((result) => {
+        const name = (result?.testName || result?.test_name || '').toString().toLowerCase();
+        const booking = (result?.bookingId || result?.booking_id || '').toString().toLowerCase();
+        const term = (searchTerm || '').toString().toLowerCase();
+        return name.includes(term) || booking.includes(term);
+      })
+    : [];
 
   const formatDate = (dateString) => {
-    return format(new Date(dateString), 'MMM d, yyyy');
+    try {
+      if (!dateString) return '-';
+      const d = new Date(dateString);
+      if (isNaN(d)) return '-';
+      return format(d, 'MMM d, yyyy');
+    } catch (e) {
+      return '-';
+    }
   };
 
   const handleViewReport = (result) => {
+    if (!result) return;
     setSelectedResult(result);
     setShowReportModal(true);
   };
@@ -44,41 +58,80 @@ const TestResults = ({ results, onRefresh }) => {
     }
   };
 
-  // Mock report data for demonstration
-  const mockReportData = {
-    patientInfo: {
-      name: 'John Doe',
-      age: 32,
-      gender: 'Male',
-      sampleId: 'SAM123456',
-      collectionDate: '2025-08-10',
-      reportDate: '2025-08-11',
-    },
-    testParameters: [
-      {
-        parameter: 'Glucose (Fasting)',
-        result: '95',
-        unit: 'mg/dL',
-        referenceRange: '70-100',
-        status: 'Normal',
-        flag: 'normal'
-      },
-      {
-        parameter: 'HbA1c',
-        result: '5.2',
-        unit: '%',
-        referenceRange: '<5.7',
-        status: 'Normal',
-        flag: 'normal'
-      },
-    ],
-    doctorComments: 'All parameters are within normal limits. Continue with current lifestyle.',
-    labInfo: {
-      name: 'Diagnosia Lab',
-      address: '123 Medical Plaza, Health District, New Delhi',
-      phone: '+91 98765 43210',
+  const { user } = useAuth();
+
+  // Derive a display model from the selectedResult (DB row). Uses fallbacks when fields are missing.
+  const buildReportData = (res) => {
+    if (!res) return null;
+    const patientInfo = {
+      name: `${user?.first_name || user?.firstName || ''} ${user?.last_name || ''}`.trim() || 'Patient',
+      age: user?.date_of_birth ? Math.max(0, new Date().getFullYear() - new Date(user.date_of_birth).getFullYear()) : undefined,
+      gender: user?.gender || user?.sex || '-',
+      sampleId: res.sample_code || res.sample_id || '-',
+      collectionDate: res.collected_at || res.collection_date || '-',
+      reportDate: res.processed_at || res.processedAt || res.processed_at || null,
+    };
+
+    const values = res.result_values || {};
+    const refParams = (res.reference_ranges && res.reference_ranges.parameters) || [];
+    // If reference param defs available, use them to preserve ordering and units/labels
+    let testParameters = [];
+    if (Array.isArray(refParams) && refParams.length > 0) {
+      testParameters = refParams.map((p) => {
+        const key = p.key || p.label || p.name;
+        const raw = values[key];
+        const flagObj = (res.abnormal_flags && res.abnormal_flags[key]) || {};
+        return {
+          key,
+          parameter: p.label || p.name || key,
+          result: raw === undefined || raw === null ? '-' : (typeof raw === 'object' ? JSON.stringify(raw) : String(raw)),
+          unit: p.unit || '',
+          referenceRange: (() => {
+            try {
+              if (p.range) {
+                if (p.range.low != null || p.range.high != null) return `${p.range.low ?? ''}-${p.range.high ?? ''}`;
+                const male = p.range.male ? `${p.range.male.low ?? ''}-${p.range.male.high ?? ''}` : null;
+                const female = p.range.female ? `${p.range.female.low ?? ''}-${p.range.female.high ?? ''}` : null;
+                if (male || female) return `M:${male || '-'} F:${female || '-'}`;
+              }
+            } catch (e) {}
+            return p.referenceRange || '';
+          })(),
+          flag: flagObj.flag || 'normal',
+          status: flagObj.flag === 'normal' ? 'Normal' : (flagObj.flag === 'high' ? 'High' : (flagObj.flag === 'low' ? 'Low' : (flagObj.flag || ''))),
+        };
+      });
+    } else {
+      // Fallback: iterate keys from result_values
+      testParameters = Object.keys(values || {}).map((k) => {
+        const raw = values[k];
+        const flagObj = (res.abnormal_flags && res.abnormal_flags[k]) || {};
+        return {
+          key: k,
+          parameter: k,
+          result: raw === undefined || raw === null ? '-' : (typeof raw === 'object' ? JSON.stringify(raw) : String(raw)),
+          unit: '',
+          referenceRange: '',
+          flag: flagObj.flag || 'normal',
+          status: flagObj.flag === 'normal' ? 'Normal' : (flagObj.flag === 'high' ? 'High' : (flagObj.flag === 'low' ? 'Low' : (flagObj.flag || ''))),
+        };
+      });
     }
+
+    return {
+      patientInfo,
+      testParameters,
+      doctorComments: res.interpretation || res.recommendations || '',
+      labInfo: {
+        name: 'Diagnosia Lab',
+        address: 'N/A',
+        phone: '',
+      }
+    };
   };
+
+  // Compute once for rendering to avoid repeated calls and to provide a stable object in JSX
+  const currentReportData = selectedResult ? buildReportData(selectedResult) : null;
 
   return (
     <div className="space-y-6">
@@ -124,7 +177,7 @@ const TestResults = ({ results, onRefresh }) => {
       ) : (
         <div className="grid gap-6">
           {filteredResults.map((result) => (
-            <Card key={result.id} className="p-6">
+            <Card key={result?.id || `${result?.bookingId || 'r'}-${Math.random()}`} className="p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center space-x-3 mb-3">
@@ -132,23 +185,31 @@ const TestResults = ({ results, onRefresh }) => {
                       <FileText className="h-5 w-5 text-green-600" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{result.testName}</h3>
-                      <p className="text-sm text-gray-600">Report ID: {result.bookingId}</p>
+                      <h3 className="text-lg font-semibold text-gray-900">{result.testName || result.test_name || result.name || 'Test'}</h3>
+                      <p className="text-sm text-gray-600">Report ID: {result.bookingId || result.booking_id || result.id || '-'}</p>
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                     <div>
                       <span className="text-gray-600">Test Date:</span>
-                      <div className="font-medium text-gray-900">{formatDate(result.date)}</div>
+                      <div className="font-medium text-gray-900">{
+                        formatDate(
+                          result.appointment_date || result.appointmentDate || result.test_date || result.date || result.collection_date || result.created_at
+                        )
+                      }</div>
                     </div>
                     <div>
                       <span className="text-gray-600">Status:</span>
                       <div className="font-medium text-green-600">Completed</div>
                     </div>
                     <div>
-                      <span className="text-gray-600">Report Generated:</span>
-                      <div className="font-medium text-gray-900">{formatDate(result.date)}</div>
+                      <span className="text-gray-600">Report Date:</span>
+                      <div className="font-medium text-gray-900">{
+                        formatDate(
+                          result.processed_at || result.reportDate || result.reported_at || result.completed_at || result.created_at
+                        )
+                      }</div>
                     </div>
                   </div>
 
@@ -206,52 +267,52 @@ const TestResults = ({ results, onRefresh }) => {
         title="Test Report"
         size="xl"
       >
-        {selectedResult && (
-          <div className="space-y-6">
+    {selectedResult && (
+      <div className="space-y-6 p-6">
             {/* Report Header */}
             <div className="text-center border-b pb-6">
-              <h2 className="text-2xl font-bold text-gray-900">{selectedResult.testName}</h2>
+              <h2 className="text-2xl font-bold text-gray-900">{selectedResult.testName || selectedResult.test_name || selectedResult.testCode || selectedResult.test_code}</h2>
               <p className="text-gray-600 mt-1">Laboratory Report</p>
             </div>
 
             {/* Patient & Lab Info */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-3">Patient Information</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="grid grid-cols-2">
-                    <span className="text-gray-600">Name:</span>
-                    <span className="font-medium">{mockReportData.patientInfo.name}</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Patient Information</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="grid grid-cols-2">
+                      <span className="text-gray-600">Name:</span>
+                      <span className="font-medium">{currentReportData?.patientInfo?.name || '-'}</span>
+                    </div>
+                    <div className="grid grid-cols-2">
+                      <span className="text-gray-600">Age:</span>
+                      <span className="font-medium">{currentReportData?.patientInfo?.age ? `${currentReportData.patientInfo.age} years` : '-'}</span>
+                    </div>
+                    <div className="grid grid-cols-2">
+                      <span className="text-gray-600">Gender:</span>
+                      <span className="font-medium">{currentReportData?.patientInfo?.gender || '-'}</span>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2">
-                    <span className="text-gray-600">Age:</span>
-                    <span className="font-medium">{mockReportData.patientInfo.age} years</span>
-                  </div>
-                  <div className="grid grid-cols-2">
-                    <span className="text-gray-600">Gender:</span>
-                    <span className="font-medium">{mockReportData.patientInfo.gender}</span>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-3">Sample Information</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="grid grid-cols-2">
+                      <span className="text-gray-600">Sample ID:</span>
+                      <span className="font-medium">{currentReportData?.patientInfo?.sampleId || '-'}</span>
+                    </div>
+                    <div className="grid grid-cols-2">
+                      <span className="text-gray-600">Collection:</span>
+                      <span className="font-medium">{currentReportData?.patientInfo?.collectionDate ? formatDate(currentReportData.patientInfo.collectionDate) : '-'}</span>
+                    </div>
+                    <div className="grid grid-cols-2">
+                      <span className="text-gray-600">Report Date:</span>
+                      <span className="font-medium">{currentReportData?.patientInfo?.reportDate ? formatDate(currentReportData.patientInfo.reportDate) : formatDate(selectedResult.processed_at || selectedResult.processedAt || selectedResult.reported_at || selectedResult.created_at)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-              
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-3">Sample Information</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="grid grid-cols-2">
-                    <span className="text-gray-600">Sample ID:</span>
-                    <span className="font-medium">{mockReportData.patientInfo.sampleId}</span>
-                  </div>
-                  <div className="grid grid-cols-2">
-                    <span className="text-gray-600">Collection:</span>
-                    <span className="font-medium">{formatDate(mockReportData.patientInfo.collectionDate)}</span>
-                  </div>
-                  <div className="grid grid-cols-2">
-                    <span className="text-gray-600">Report Date:</span>
-                    <span className="font-medium">{formatDate(mockReportData.patientInfo.reportDate)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
 
             {/* Test Results */}
             <div>
@@ -268,25 +329,28 @@ const TestResults = ({ results, onRefresh }) => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {mockReportData.testParameters.map((param, index) => (
-                      <tr key={index}>
-                        <td className="px-4 py-3 font-medium text-gray-900">{param.parameter}</td>
-                        <td className="px-4 py-3 font-medium">{param.result}</td>
-                        <td className="px-4 py-3 text-gray-600">{param.unit}</td>
-                        <td className="px-4 py-3 text-gray-600">{param.referenceRange}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                            param.flag === 'normal' 
-                              ? 'bg-green-100 text-green-800'
-                              : param.flag === 'high'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {param.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {(() => {
+                      const params = currentReportData?.testParameters || [];
+                      return params.map((param, index) => (
+                        <tr key={param.key || index}>
+                          <td className="px-4 py-3 font-medium text-gray-900">{param.parameter}</td>
+                          <td className="px-4 py-3 font-medium">{param.result}</td>
+                          <td className="px-4 py-3 text-gray-600">{param.unit}</td>
+                          <td className="px-4 py-3 text-gray-600">{param.referenceRange}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                              param.flag === 'normal' 
+                                ? 'bg-green-100 text-green-800'
+                                : param.flag === 'high'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {param.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -295,14 +359,14 @@ const TestResults = ({ results, onRefresh }) => {
             {/* Doctor Comments */}
             <div className="p-4 bg-blue-50 rounded-lg">
               <h4 className="font-semibold text-blue-900 mb-2">Doctor's Comments</h4>
-              <p className="text-blue-800 text-sm">{mockReportData.doctorComments}</p>
+              <p className="text-blue-800 text-sm">{selectedResult?.interpretation || selectedResult?.recommendations || '-'}</p>
             </div>
 
             {/* Lab Information */}
             <div className="text-center text-xs text-gray-500 border-t pt-4">
-              <p className="font-medium">{mockReportData.labInfo.name}</p>
-              <p>{mockReportData.labInfo.address}</p>
-              <p>Phone: {mockReportData.labInfo.phone}</p>
+              <p className="font-medium">{currentReportData?.labInfo?.name || 'Diagnosia Lab'}</p>
+              <p>{currentReportData?.labInfo?.address || ''}</p>
+              <p>Phone: {currentReportData?.labInfo?.phone || ''}</p>
             </div>
 
             {/* Modal Actions */}

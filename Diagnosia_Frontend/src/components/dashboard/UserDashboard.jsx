@@ -77,26 +77,44 @@ const UserDashboard = () => {
         apiService.users.getProfile().catch(() => null),
       ]);
       const upcomingAppointments = appointmentsRes.data || [];
-      // Exclude cancelled from the upcoming count
-      const activeAppointments = upcomingAppointments.filter((a) => {
+      const recentResults = resultsRes.data || [];
+
+      // Build a set of appointment ids that have results so we can exclude them from appointments view
+      const completedAppointmentIds = new Set(
+        recentResults.map(r => (r?.appointment_id ?? r?.appointmentId ?? r?.appointment_id))
+      );
+
+      // Exclude appointments that are reported/completed (either by status label or because a result exists)
+      const filteredUpcoming = upcomingAppointments.filter((a) => {
+        const status = (a.status_label || a.status || a.appointment_status || '').toString().toLowerCase();
+        if (!status) return true;
+        if (status === 'reported' || status === 'completed') return false;
+        // keep sample_collected, confirmed, pending, booked etc.
+        const aptId = a.appointment_id ?? a.appointmentId ?? a.id;
+        if (aptId && completedAppointmentIds.has(aptId)) return false;
+        return true;
+      });
+
+      // Exclude cancelled from pending count
+      const activeAppointments = filteredUpcoming.filter((a) => {
         const status = (a.status_label || a.status || '').toString().toLowerCase();
         return status !== 'cancelled';
       });
-      const recentResults = resultsRes.data || [];
       if (profileRes?.data) {
         // Keep global auth user in sync with latest profile
         updateUser(profileRes.data);
       }
       setDashboardData({
-        upcomingAppointments,
+        upcomingAppointments: filteredUpcoming,
         recentResults,
         pendingReports: [], // You can add logic to filter pending reports from results if needed
-    stats: {
-      pendingAppointments: activeAppointments.length,
-      completedTests: recentResults.length,
-      pendingReports: 0,
-      totalTests: activeAppointments.length + recentResults.length + 0, // 0 for pendingReports, update when logic added
-    }
+        stats: {
+          pendingAppointments: activeAppointments.length,
+          completedTests: recentResults.length,
+          pendingReports: 0,
+          // Total tests: upcoming (pending) + completed results
+          totalTests: activeAppointments.length + recentResults.length,
+        }
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);

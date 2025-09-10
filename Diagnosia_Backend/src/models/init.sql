@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS samples (
 -- 5. Results Management Tables
 CREATE TABLE IF NOT EXISTS test_results (
   result_id SERIAL PRIMARY KEY,
+  appointment_test_id INTEGER REFERENCES appointment_tests(appointment_test_id),
   sample_id INTEGER REFERENCES samples(sample_id),
   test_code VARCHAR(50) REFERENCES tests(test_code),
   processed_by INTEGER REFERENCES users(user_id),
@@ -154,6 +155,7 @@ CREATE TABLE IF NOT EXISTS payment_methods (
   method_id SERIAL PRIMARY KEY,
   method_name VARCHAR(100) NOT NULL,
   method_type VARCHAR(20) NOT NULL CHECK (method_type IN ('online', 'cash', 'card', 'wallet', 'upi')),
+  CONSTRAINT unique_payment_method_name UNIQUE (method_name),
   is_active BOOLEAN DEFAULT TRUE
 );
 
@@ -254,4 +256,13 @@ CREATE TABLE IF NOT EXISTS chatbot_messages (
   confidence_score DECIMAL(5,4),
   response_time_ms INTEGER,
   created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Optional: table to persist panel templates for admin editing (added in migration)
+CREATE TABLE IF NOT EXISTS test_panels (
+  panel_id SERIAL PRIMARY KEY,
+  test_code VARCHAR(100) UNIQUE NOT NULL,
+  panel_json JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
 );

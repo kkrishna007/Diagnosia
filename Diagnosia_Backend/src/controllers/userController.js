@@ -58,7 +58,7 @@ export const getAppointments = async (req, res, next) => {
 export const getTestResults = async (req, res, next) => {
   try {
     const results = await pool.query(
-      `SELECT tr.*, t.test_name, t.test_code, s.sample_code, at.appointment_id
+  `SELECT tr.*, t.test_name, t.test_code, s.sample_code, s.collected_at, at.appointment_id, a.appointment_date, a.appointment_time
        FROM test_results tr
        JOIN samples s ON tr.sample_id = s.sample_id
        JOIN appointment_tests at ON s.appointment_test_id = at.appointment_test_id

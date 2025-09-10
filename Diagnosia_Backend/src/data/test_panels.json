@@ -1,0 +1,105 @@
+
+{
+	"lipid": {
+		"test_code": "lipid",
+		"display_name": "Lipid Profile",
+		"parameters": [
+			{ "key": "total_cholesterol", "label": "Total Cholesterol", "unit": "mg/dL", "range": { "high": 200 }, "notes": "Desirable: <200 mg/dL. 200–239 borderline high; ≥240 high." },
+			{ "key": "hdl", "label": "HDL Cholesterol", "unit": "mg/dL", "range": { "male": { "low": 40 }, "female": { "low": 50 } }, "notes": "Protective cholesterol. Men: desirable >40 mg/dL; Women: desirable >50 mg/dL. Higher is better." },
+			{ "key": "ldl", "label": "LDL Cholesterol", "unit": "mg/dL", "range": { "high": 100 }, "notes": "Optimal LDL: <100 mg/dL. 100–129 near optimal; >160 high." },
+			{ "key": "vldl", "label": "VLDL Cholesterol", "unit": "mg/dL", "range": { "low": 2, "high": 30 }, "notes": "Typical VLDL: 2–30 mg/dL; elevated with high triglycerides." },
+			{ "key": "triglycerides", "label": "Triglycerides", "unit": "mg/dL", "range": { "high": 150 }, "notes": "Normal: <150 mg/dL. 150–199 borderline; 200–499 high." },
+			{ "key": "chol_hdl_ratio", "label": "Cholesterol/HDL Ratio", "unit": "", "range": { "high": 4.5 }, "notes": "Desirable ratio: <4.5 (lower indicates lower risk)." }
+		]
+	},
+	"vitd": {
+		"test_code": "vitd",
+		"display_name": "Vitamin D (25(OH)D)",
+		"parameters": [
+			{ "key": "vitamin_d_25", "label": "Vitamin D (25(OH)D)", "unit": "ng/mL", "range": { "low": 20, "high": 50 }, "notes": "Sufficient: 20–50 ng/mL. Deficiency <20 ng/mL; Insufficiency 20–29 ng/mL; Toxicity >100 ng/mL." }
+		]
+	},
+		"iron": {
+			"test_code": "iron",
+			"display_name": "Iron Deficiency Panel",
+		"parameters": [
+			{ "key": "serum_iron", "label": "Serum Iron", "unit": "µg/dL", "range": { "low": 60, "high": 170 }, "notes": "Normal serum iron: 60–170 µg/dL; low suggests iron deficiency." },
+			{ "key": "tibc", "label": "Total Iron Binding Capacity (TIBC)", "unit": "µg/dL", "range": { "low": 240, "high": 450 }, "notes": "TIBC typically 240–450 µg/dL; high TIBC suggests iron deficiency." },
+			{ "key": "transferrin_saturation", "label": "Transferrin Saturation", "unit": "%", "range": { "low": 20, "high": 50 }, "notes": "Transferrin saturation 20–50% (low in iron deficiency)." },
+			{ "key": "ferritin", "label": "Serum Ferritin", "unit": "ng/mL", "range": { "male": { "low": 24, "high": 336 }, "female": { "low": 11, "high": 307 } }, "notes": "Ferritin reflects iron stores: Men 24–336 ng/mL, Women 11–307 ng/mL; low ferritin indicates iron deficiency." }
+		]
+	},
+		"kft": {
+			"test_code": "kft",
+			"display_name": "Kidney Function Test",
+		"parameters": [
+			{ "key": "serum_creatinine", "label": "Serum Creatinine", "unit": "mg/dL", "range": { "male": { "low": 0.7, "high": 1.3 }, "female": { "low": 0.6, "high": 1.1 } }, "notes": "Creatinine normal ranges differ by sex; elevated values suggest reduced kidney function." },
+			{ "key": "bun", "label": "Blood Urea Nitrogen (BUN)", "unit": "mg/dL", "range": { "low": 7, "high": 20 }, "notes": "BUN normal: 7–20 mg/dL; high BUN can indicate renal impairment or dehydration." },
+			{ "key": "uric_acid", "label": "Uric Acid", "unit": "mg/dL", "range": { "male": { "low": 3.4, "high": 7.0 }, "female": { "low": 2.4, "high": 6.0 } }, "notes": "Uric acid normal ranges differ by sex; very high values associated with gout or renal disease." },
+			{ "key": "sodium", "label": "Sodium (Na+)", "unit": "mmol/L", "range": { "low": 135, "high": 145 }, "notes": "Normal sodium: 135–145 mmol/L; abnormalities affect fluid balance and neurologic status." },
+			{ "key": "potassium", "label": "Potassium (K+)", "unit": "mmol/L", "range": { "low": 3.5, "high": 5.0 }, "notes": "Normal potassium: 3.5–5.0 mmol/L; hypo/hyperkalemia can be dangerous." },
+			{ "key": "chloride", "label": "Chloride (Cl-)", "unit": "mmol/L", "range": { "low": 98, "high": 107 }, "notes": "Chloride: 98–107 mmol/L; changes often mirror sodium and acid-base status." },
+			{ "key": "calcium", "label": "Calcium", "unit": "mg/dL", "range": { "low": 8.5, "high": 10.5 }, "notes": "Serum calcium normal: 8.5–10.5 mg/dL; interpret with albumin if abnormal." },
+			{ "key": "egfr", "label": "eGFR", "unit": "mL/min/1.73m2", "range": { "low": 90 }, "notes": "eGFR >90 mL/min/1.73m² is normal; lower values indicate reduced kidney function/staging." }
+		]
+	},
+		"lft": {
+			"test_code": "lft",
+			"display_name": "Liver Function Test",
+		"parameters": [
+			{ "key": "total_bilirubin", "label": "Total Bilirubin", "unit": "mg/dL", "range": { "low": 0.1, "high": 1.2 }, "notes": "Total bilirubin normal: 0.1–1.2 mg/dL; elevated levels cause jaundice." },
+			{ "key": "direct_bilirubin", "label": "Direct Bilirubin", "unit": "mg/dL", "range": { "low": 0.0, "high": 0.3 }, "notes": "Direct bilirubin (conjugated) normally 0.0–0.3 mg/dL; elevation suggests obstructive or hepatic causes." },
+			{ "key": "sgpt_alt", "label": "SGPT (ALT)", "unit": "U/L", "range": { "low": 7, "high": 56 }, "notes": "ALT (SGPT) normal 7–56 U/L; elevated in hepatocellular injury." },
+			{ "key": "sgot_ast", "label": "SGOT (AST)", "unit": "U/L", "range": { "low": 8, "high": 48 }, "notes": "AST (SGOT) normal 8–48 U/L; interpret AST/ALT ratio for differential diagnosis." },
+			{ "key": "alp", "label": "Alkaline Phosphatase (ALP)", "unit": "U/L", "range": { "low": 44, "high": 147 }, "notes": "ALP normal 44–147 U/L; high in cholestasis or bone disease." },
+			{ "key": "total_protein", "label": "Total Protein", "unit": "g/dL", "range": { "low": 6.0, "high": 8.3 }, "notes": "Total protein normal 6.0–8.3 g/dL; low levels seen in malnutrition or liver disease." },
+			{ "key": "albumin", "label": "Albumin", "unit": "g/dL", "range": { "low": 3.5, "high": 5.0 }, "notes": "Albumin normal 3.5–5.0 g/dL; low albumin suggests chronic liver disease or malnutrition." }
+		]
+	},
+		"thyroid": {
+			"test_code": "thyroid",
+			"display_name": "Thyroid Profile",
+		"parameters": [
+			{ "key": "t3", "label": "Total T3", "unit": "ng/dL", "range": { "low": 80, "high": 200 }, "notes": "Total T3 normal 80–200 ng/dL." },
+			{ "key": "t4", "label": "Total T4", "unit": "µg/dL", "range": { "low": 5.0, "high": 12.0 }, "notes": "Total T4 normal 5.0–12.0 µg/dL." },
+			{ "key": "tsh", "label": "TSH", "unit": "µIU/mL", "range": { "low": 0.4, "high": 4.0 }, "notes": "TSH normal 0.4–4.0 µIU/mL; low TSH suggests hyperthyroidism, high suggests hypothyroidism." }
+		]
+	},
+		"cbc": {
+			"test_code": "cbc",
+			"display_name": "Complete Blood Count",
+		"parameters": [
+			{ "key": "hemoglobin", "label": "Hemoglobin", "unit": "g/dL", "range": { "male": { "low": 13.8, "high": 17.2 }, "female": { "low": 12.1, "high": 15.1 } }, "notes": "Hemoglobin normal: Men 13.8–17.2 g/dL; Women 12.1–15.1 g/dL." },
+			{ "key": "rbc", "label": "RBC Count", "unit": "million/µL", "range": { "male": { "low": 4.7, "high": 6.1 }, "female": { "low": 4.2, "high": 5.4 } }, "notes": "RBC count normal: Men 4.7–6.1; Women 4.2–5.4 million/µL." },
+			{ "key": "hct", "label": "Hematocrit", "unit": "%", "range": { "male": { "low": 40, "high": 52 }, "female": { "low": 36, "high": 48 } }, "notes": "Hematocrit normal ranges: Men 40–52%; Women 36–48%." },
+			{ "key": "wbc", "label": "WBC Count", "unit": "/µL", "range": { "low": 4000, "high": 11000 }, "notes": "WBC normal: 4,000–11,000/µL; elevated in infection/inflammation." },
+			{ "key": "platelets", "label": "Platelet Count", "unit": "/µL", "range": { "low": 150000, "high": 450000 }, "notes": "Platelet count normal: 150,000–450,000/µL." }
+		]
+	},
+		"urine": {
+			"test_code": "urine",
+			"display_name": "Urine Routine Examination",
+		"parameters": [
+			{ "key": "color", "label": "Color", "unit": "", "notes": "Expected: Pale yellow. Dark urine may indicate dehydration or bilirubin." },
+			{ "key": "appearance", "label": "Appearance", "unit": "", "notes": "Expected: Clear. Cloudy urine may indicate infection or crystals." },
+			{ "key": "specific_gravity", "label": "Specific Gravity", "unit": "", "range": { "low": 1.005, "high": 1.030 }, "notes": "Specific gravity 1.005–1.030; indicates urine concentration." },
+			{ "key": "ph", "label": "pH", "unit": "", "range": { "low": 4.6, "high": 8.0 }, "notes": "Urine pH 4.6–8.0; abnormal values suggest metabolic or renal issues." }
+		]
+	},
+		"diabpkg": {
+			"test_code": "diabpkg",
+			"display_name": "Diabetes Package (HbA1c + Glucose)",
+		"parameters": [
+			{ "key": "fbg", "label": "Fasting Blood Glucose", "unit": "mg/dL", "range": { "low": 70, "high": 100 }, "notes": "Fasting blood glucose normal 70–100 mg/dL." },
+			{ "key": "ppg", "label": "Postprandial Glucose (2hr)", "unit": "mg/dL", "range": { "high": 140 }, "notes": "Postprandial (2hr) desirable <140 mg/dL." },
+			{ "key": "random_glucose", "label": "Random Glucose", "unit": "mg/dL", "range": { "high": 200 }, "notes": "Random glucose <200 mg/dL generally acceptable; higher values suggest hyperglycemia." },
+			{ "key": "hba1c", "label": "HbA1c", "unit": "%", "range": { "low": 4.0, "high": 5.6 }, "notes": "HbA1c: normal 4.0–5.6%; Prediabetes 5.7–6.4%; Diabetes ≥6.5%." }
+		]
+		},
+	"healthpkg": {
+		"test_code": "healthpkg",
+		"display_name": "Complete Health Checkup (composite)",
+		"notes": "Composite panel - includes CBC, KFT, LFT, Lipid, Thyroid, Urine, Diabetes, Vitamin D, Iron. Use UI to render each sub-panel.",
+		"parameters": []
+	}
+}

@@ -138,6 +138,18 @@ export const apiService = {
       const token = localStorage.getItem('employee_token');
       return api.get('/employee/lab/worklist', { headers: { Authorization: token ? `Bearer ${token}` : '' } });
     },
+    getPanel: (testCode) => {
+      const token = localStorage.getItem('employee_token');
+      return api.get(`/employee/lab/panels/${encodeURIComponent(testCode)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    saveTestResult: (payload) => {
+      const token = localStorage.getItem('employee_token');
+      return api.post('/employee/lab/results', payload, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
+    getTestResult: (appointmentTestId) => {
+      const token = localStorage.getItem('employee_token');
+      return api.get(`/employee/lab/results/${appointmentTestId}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
     getAdminOverview: () => {
       const token = localStorage.getItem('employee_token');
       return api.get('/employee/admin/overview', { headers: { Authorization: token ? `Bearer ${token}` : '' } });
