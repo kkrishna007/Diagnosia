@@ -103,7 +103,7 @@ const Home = () => {
               </p>
               <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
                 <Link to="/tests">
-                  <Button size="lg" variant="primary" className="font-semibold">
+                  <Button size="lg" variant="primary" className="font-semibold bg-primary-500 hover:bg-primary-600">
                     Book a Test Now
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
@@ -291,7 +291,7 @@ const Home = () => {
           </p>
           <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 justify-center">
             <Link to="/tests">
-              <Button size="lg" variant="primary" className="font-semibold">
+              <Button size="lg" variant="primary" className="font-semibold bg-primary-500 hover:bg-primary-600">
                 Browse Tests
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>

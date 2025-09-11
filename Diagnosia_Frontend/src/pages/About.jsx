@@ -299,7 +299,7 @@ const About = () => {
               </p>
               <div className="space-y-4">
                 <Link to="/tests">
-                  <Button size="lg" className="bg-white text-blue-600 hover:bg-blue-50">
+                  <Button size="lg" variant="primary" className="font-semibold bg-primary-500 hover:bg-primary-600">
                     Browse Tests
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>

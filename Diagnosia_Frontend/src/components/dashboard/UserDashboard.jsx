@@ -76,28 +76,79 @@ const UserDashboard = () => {
         apiService.users.getTestResults(),
         apiService.users.getProfile().catch(() => null),
       ]);
-      const upcomingAppointments = appointmentsRes.data || [];
-      const recentResults = resultsRes.data || [];
+      const upcomingAppointmentsRaw = appointmentsRes.data || [];
+      const recentResultsRaw = resultsRes.data || [];
+
+      // Helpers to normalize shapes coming from different endpoints so UI never renders blanks
+      const timeSlotLabel = (ts) => {
+        if (!ts) return '';
+        const map = {
+          '6-8': '6:00 AM - 8:00 AM',
+          '8-10': '8:00 AM - 10:00 AM',
+          '10-12': '10:00 AM - 12:00 PM',
+          '12-14': '12:00 PM - 2:00 PM',
+          '14-16': '2:00 PM - 4:00 PM',
+          '16-18': '4:00 PM - 6:00 PM',
+          '18-20': '6:00 PM - 8:00 PM',
+        };
+        if (map[ts]) return map[ts];
+        // map common HH:mm:ss start times to a 2-hour range (default UI expectation)
+        const startMap = {
+          '06:00:00': '6:00 AM - 8:00 AM',
+          '08:00:00': '8:00 AM - 10:00 AM',
+          '10:00:00': '10:00 AM - 12:00 PM',
+          '12:00:00': '12:00 PM - 2:00 PM',
+          '14:00:00': '2:00 PM - 4:00 PM',
+          '16:00:00': '4:00 PM - 6:00 PM',
+          '18:00:00': '6:00 PM - 8:00 PM',
+        };
+        return startMap[String(ts).slice(0, 8)] || '';
+      };
+
+      const normalizeAppointment = (item) => {
+        const dateRaw = item?.date || item?.appointment_date || item?.collection_date || item?.scheduled_for || item?.created_at;
+        const timeRaw = item?.timeSlot || item?.appointment_time || item?.time || item?.slot || item?.time_slot;
+        const status = (item?.status_label || item?.status || item?.appointment_status || '')?.toString()?.toLowerCase?.() || '';
+        return {
+          ...item,
+          id: item?.id ?? item?.appointment_id ?? item?.appointmentId ?? item?.bookingId,
+          appointmentId: item?.appointment_id ?? item?.id ?? item?.appointmentId,
+          bookingId: item?.bookingId ?? item?.id ?? item?.appointment_id ?? item?.appointmentId ?? item?.reference_code,
+          testName: item?.testName ?? item?.test_name ?? item?.name ?? item?.test?.name ?? 'Lab Test',
+          date: dateRaw || null,
+          timeSlot: timeSlotLabel(timeRaw),
+          status,
+        };
+      };
+
+      const normalizeResult = (item) => ({
+        ...item,
+        id: item?.id ?? item?.result_id ?? item?.test_result_id ?? item?.testResultId,
+        testName: item?.testName ?? item?.test_name ?? item?.name ?? item?.test?.name ?? 'Lab Test',
+      });
+
+      const upcomingAppointments = upcomingAppointmentsRaw.map(normalizeAppointment);
+      const recentResults = recentResultsRaw.map(normalizeResult);
 
       // Build a set of appointment ids that have results so we can exclude them from appointments view
       const completedAppointmentIds = new Set(
-        recentResults.map(r => (r?.appointment_id ?? r?.appointmentId ?? r?.appointment_id))
+        recentResultsRaw.map(r => (r?.appointment_id ?? r?.appointmentId ?? r?.appointment_id))
       );
 
       // Exclude appointments that are reported/completed (either by status label or because a result exists)
       const filteredUpcoming = upcomingAppointments.filter((a) => {
-        const status = (a.status_label || a.status || a.appointment_status || '').toString().toLowerCase();
+        const status = (a.status || '').toString().toLowerCase();
         if (!status) return true;
         if (status === 'reported' || status === 'completed') return false;
         // keep sample_collected, confirmed, pending, booked etc.
-        const aptId = a.appointment_id ?? a.appointmentId ?? a.id;
+        const aptId = a.appointmentId ?? a.id;
         if (aptId && completedAppointmentIds.has(aptId)) return false;
         return true;
       });
 
       // Exclude cancelled from pending count
       const activeAppointments = filteredUpcoming.filter((a) => {
-        const status = (a.status_label || a.status || '').toString().toLowerCase();
+        const status = (a.status || '').toString().toLowerCase();
         return status !== 'cancelled';
       });
       if (profileRes?.data) {
@@ -297,20 +348,26 @@ const UserDashboard = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
               <div className="space-y-4">
                 {dashboardData.upcomingAppointments.slice(0, 3).map((appointment) => (
-                  <div key={appointment.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <div key={appointment.id || appointment.bookingId} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                     <Calendar className="h-5 w-5 text-blue-600" />
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900">{appointment.testName}</p>
-                      <p className="text-sm text-gray-600">{appointment.date} • {appointment.timeSlot}</p>
+                      <p className="font-medium text-gray-900">{appointment.testName || 'Lab Test'}</p>
+                      <p className="text-sm text-gray-600">
+                        {appointment.date ? formatDate(appointment.date, 'PPP') : '-'}
+                        {appointment.timeSlot ? ` • ${appointment.timeSlot}` : ''}
+                        {appointment.status ? ` • ${appointment.status.replace('_',' ')}` : ''}
+                      </p>
                     </div>
                   </div>
                 ))}
                 {dashboardData.recentResults.slice(0, 2).map((result) => (
-                  <div key={result.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <div key={result.id || result.result_id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                     <FileText className="h-5 w-5 text-green-600" />
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900">{result.testName}</p>
-                      <p className="text-sm text-gray-600">Report available</p>
+                      <p className="font-medium text-gray-900">{result.testName || 'Lab Test'}</p>
+                      <p className="text-sm text-gray-600">
+                        Report available{result.processed_at ? ` • ${formatDate(result.processed_at, 'PPP')}` : ''}
+                      </p>
                     </div>
                   </div>
                 ))}
