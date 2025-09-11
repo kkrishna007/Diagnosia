@@ -64,6 +64,11 @@ const TestResults = ({ results, onRefresh }) => {
 
   const { user } = useAuth();
 
+  // Derive IDs for display
+  const getResultId = (r) => (
+    r?.result_id || r?.resultId || r?.test_result_id || r?.testResultId || r?.id || ''
+  );
+
   // Derive a display model from the selectedResult (DB row). Uses fallbacks when fields are missing.
   const buildReportData = (res) => {
     if (!res) return null;
@@ -190,7 +195,7 @@ const TestResults = ({ results, onRefresh }) => {
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">{result.testName || result.test_name || result.name || 'Test'}</h3>
-                      <p className="text-sm text-gray-600">Report ID: {result.bookingId || result.booking_id || result.id || '-'}</p>
+                      <p className="text-sm text-gray-600">Report ID: {getResultId(result) || '-'}</p>
                     </div>
                   </div>
                   

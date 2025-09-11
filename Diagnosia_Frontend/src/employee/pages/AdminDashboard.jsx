@@ -173,15 +173,25 @@ export default function AdminDashboard() {
                       <div className="space-x-2">
                         <button className="px-3 py-1 bg-yellow-600 text-white rounded" onClick={async ()=> {
                           try {
-                            const dr = await apiService.employee.getUserDependents(p.user_id);
-                            const d = dr.data || dr;
-                            if (d && Object.values(d).some((v) => Number(v) > 0)) {
-                              const confirmForce = window.confirm(`User has dependents: ${JSON.stringify(d)}. Force delete? This will remove related data.`);
-                              if (!confirmForce) return;
-                              await apiService.employee.forceDeleteUser(p.user_id);
-                            } else {
-                              await apiService.employee.deleteUser(p.user_id);
-                            }
+                            // Always attempt a cascading delete for patients.
+                            // Fetch dependents to show a clear summary before confirmation; proceed even if this call fails.
+                            let summary = 'no linked records detected';
+                            try {
+                              const dr = await apiService.employee.getUserDependents(p.user_id);
+                              const d = (dr && dr.data) ? dr.data : dr;
+                              if (d && typeof d === 'object') {
+                                const nonZero = Object.entries(d).filter(([_, v]) => Number(v) > 0);
+                                if (nonZero.length) summary = nonZero.map(([k, v]) => `${k}: ${v}`).join(', ');
+                              }
+                            } catch {}
+
+                            const confirmText = window.prompt(
+                              `This will permanently delete the patient and ALL related records (${summary}).\n\nType DELETE to confirm.`,
+                              ''
+                            );
+                            if (confirmText !== 'DELETE') return;
+
+                            await apiService.employee.forceDeleteUser(p.user_id);
                             await loadUsers();
                             await loadPatients();
                           } catch (e) {

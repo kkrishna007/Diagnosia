@@ -439,61 +439,112 @@ router.post('/admin/users/:id/force-delete', authEmployee, requireRoles('admin')
     const userId = parseInt(req.params.id, 10);
     await client.query('BEGIN');
 
-  // Delete dependent rows in safe order
-  // Remove test results and reports where the user acted on them
-  await client.query('DELETE FROM test_results WHERE processed_by = $1 OR verified_by = $1', [userId]);
-  await client.query('DELETE FROM test_reports WHERE generated_by = $1 OR approved_by = $1', [userId]);
+    // Build lists of appointment_ids and appointment_test_ids owned by this user (patient)
+    const apptRes = await client.query('SELECT appointment_id FROM appointments WHERE patient_id = $1', [userId]);
+    const apptIds = apptRes.rows.map(r => r.appointment_id);
 
-  // Samples and collection-related data
-  // Samples (table exists in schema)
-  await client.query('DELETE FROM samples WHERE collected_by = $1 OR received_by_lab = $1', [userId]);
-  // collection_tasks and collectors may be part of optional migrations — check before deleting
-  const tasksTbl = await client.query("SELECT to_regclass('public.collection_tasks') AS reg");
-  if (tasksTbl.rows[0] && tasksTbl.rows[0].reg) {
-    await client.query('DELETE FROM collection_tasks WHERE collector_id = $1', [userId]);
-  }
-  const collTbl = await client.query("SELECT to_regclass('public.collectors') AS reg");
-  if (collTbl.rows[0] && collTbl.rows[0].reg) {
-    await client.query('DELETE FROM collectors WHERE user_id = $1', [userId]);
-  }
-
-  // Appointments and appointment_tests (patient-side)
-  await client.query('DELETE FROM appointment_tests WHERE appointment_id IN (SELECT appointment_id FROM appointments WHERE patient_id = $1)', [userId]);
-  // Also remove appointments where user was patient or cancelled_by or rescheduled_from references may exist
-  await client.query('DELETE FROM appointments WHERE patient_id = $1 OR cancelled_by = $1', [userId]);
-
-  // Payments, notifications and addresses
-  await client.query('DELETE FROM payments WHERE user_id = $1', [userId]);
-  await client.query('DELETE FROM notifications WHERE user_id = $1', [userId]);
-  await client.query('DELETE FROM user_addresses WHERE user_id = $1', [userId]);
-
-  // Chatbot conversations and their messages where this user was participant or escalated_to
-  await client.query('DELETE FROM chatbot_messages WHERE conversation_id IN (SELECT conversation_id FROM chatbot_conversations WHERE user_id = $1 OR escalated_to = $1)', [userId]);
-  await client.query('DELETE FROM chatbot_conversations WHERE user_id = $1 OR escalated_to = $1', [userId]);
-
-  // Audit logs and system settings referencing this user - guard by table/column existence
-  const auditTbl = await client.query("SELECT to_regclass('public.audit_logs') AS reg");
-  if (auditTbl.rows[0] && auditTbl.rows[0].reg) {
-    const auditCol = await client.query("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='audit_logs' AND column_name='updated_by') AS has_col");
-    const hasAuditUpdatedBy = auditCol.rows[0] && auditCol.rows[0].has_col;
-    if (hasAuditUpdatedBy) {
-      await client.query('DELETE FROM audit_logs WHERE user_id = $1 OR updated_by = $1', [userId]);
-    } else {
-      await client.query('DELETE FROM audit_logs WHERE user_id = $1', [userId]);
+    let apptTestIds = [];
+    if (apptIds.length > 0) {
+      const apptTestsRes = await client.query('SELECT appointment_test_id FROM appointment_tests WHERE appointment_id = ANY($1::int[])', [apptIds]);
+      apptTestIds = apptTestsRes.rows.map(r => r.appointment_test_id);
     }
-  }
 
-  const sysTbl = await client.query("SELECT to_regclass('public.system_settings') AS reg");
-  if (sysTbl.rows[0] && sysTbl.rows[0].reg) {
-    const sysCol = await client.query("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='system_settings' AND column_name='updated_by') AS has_col");
-    const hasSysUpdatedBy = sysCol.rows[0] && sysCol.rows[0].has_col;
-    if (hasSysUpdatedBy) {
-      await client.query('DELETE FROM system_settings WHERE updated_by = $1', [userId]);
+    let sampleIds = [];
+    if (apptTestIds.length > 0) {
+      const sampleRes = await client.query('SELECT sample_id FROM samples WHERE appointment_test_id = ANY($1::int[])', [apptTestIds]);
+      sampleIds = sampleRes.rows.map(r => r.sample_id);
     }
-  }
 
-  // Finally remove role assignments
-  await client.query('DELETE FROM user_role_assignments WHERE user_id = $1', [userId]);
+    // Delete dependent rows in safe order
+    // 1) Results and reports
+    // Remove test results where this user acted on them OR they belong to the user's appointment tests
+    await client.query('DELETE FROM test_results WHERE processed_by = $1 OR verified_by = $1', [userId]);
+    if (apptTestIds.length > 0) {
+      await client.query('DELETE FROM test_results WHERE appointment_test_id = ANY($1::int[])', [apptTestIds]);
+    }
+    if (sampleIds.length > 0) {
+      await client.query('DELETE FROM test_results WHERE sample_id = ANY($1::int[])', [sampleIds]);
+    }
+
+    // Remove test reports generated/approved by user OR tied to user's appointments
+    await client.query('DELETE FROM test_reports WHERE generated_by = $1 OR approved_by = $1', [userId]);
+    if (apptIds.length > 0) {
+      await client.query('DELETE FROM test_reports WHERE appointment_id = ANY($1::int[])', [apptIds]);
+    }
+
+    // 2) Samples - by staff involvement or by appointment_tests
+    await client.query('DELETE FROM samples WHERE collected_by = $1 OR received_by_lab = $1', [userId]);
+    if (apptTestIds.length > 0) {
+      await client.query('DELETE FROM samples WHERE appointment_test_id = ANY($1::int[])', [apptTestIds]);
+    }
+
+    // 3) Optional collection tasks/collectors
+    const tasksTbl = await client.query("SELECT to_regclass('public.collection_tasks') AS reg");
+    if (tasksTbl.rows[0] && tasksTbl.rows[0].reg) {
+      // Delete by collector id
+      await client.query('DELETE FROM collection_tasks WHERE collector_id = $1', [userId]);
+      // Also delete tasks linked to appointments for this user if such a column exists
+      if (apptIds.length > 0) {
+        const hasApptCol = await client.query("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='collection_tasks' AND column_name='appointment_id') AS has_col");
+        if (hasApptCol.rows[0] && hasApptCol.rows[0].has_col) {
+          await client.query('DELETE FROM collection_tasks WHERE appointment_id = ANY($1::int[])', [apptIds]);
+        }
+      }
+    }
+    const collTbl = await client.query("SELECT to_regclass('public.collectors') AS reg");
+    if (collTbl.rows[0] && collTbl.rows[0].reg) {
+      await client.query('DELETE FROM collectors WHERE user_id = $1', [userId]);
+    }
+
+    // 4) Appointment tests and appointments (patient-side)
+    if (apptTestIds.length > 0) {
+      await client.query('DELETE FROM appointment_tests WHERE appointment_test_id = ANY($1::int[])', [apptTestIds]);
+    }
+
+    if (apptIds.length > 0) {
+      // Clear reschedule references pointing to these appointments
+      await client.query('UPDATE appointments SET rescheduled_from = NULL WHERE rescheduled_from = ANY($1::int[])', [apptIds]);
+      await client.query('DELETE FROM appointments WHERE appointment_id = ANY($1::int[])', [apptIds]);
+    }
+
+  // Also nullify any appointments where user was set as cancelled_by (even if not their own appt)
+  await client.query('UPDATE appointments SET cancelled_by = NULL WHERE cancelled_by = $1', [userId]);
+
+    // 5) Payments, notifications and addresses
+    await client.query('DELETE FROM payments WHERE user_id = $1', [userId]);
+    if (apptIds.length > 0) {
+      await client.query('DELETE FROM payments WHERE appointment_id = ANY($1::int[])', [apptIds]);
+    }
+    await client.query('DELETE FROM notifications WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM user_addresses WHERE user_id = $1', [userId]);
+
+    // 6) Chatbot conversations and their messages where this user was participant or escalated_to
+    await client.query('DELETE FROM chatbot_messages WHERE conversation_id IN (SELECT conversation_id FROM chatbot_conversations WHERE user_id = $1 OR escalated_to = $1)', [userId]);
+    await client.query('DELETE FROM chatbot_conversations WHERE user_id = $1 OR escalated_to = $1', [userId]);
+
+    // 7) Audit logs and system settings referencing this user - guard by table/column existence
+    const auditTbl = await client.query("SELECT to_regclass('public.audit_logs') AS reg");
+    if (auditTbl.rows[0] && auditTbl.rows[0].reg) {
+      const auditCol = await client.query("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='audit_logs' AND column_name='updated_by') AS has_col");
+      const hasAuditUpdatedBy = auditCol.rows[0] && auditCol.rows[0].has_col;
+      if (hasAuditUpdatedBy) {
+        await client.query('DELETE FROM audit_logs WHERE user_id = $1 OR updated_by = $1', [userId]);
+      } else {
+        await client.query('DELETE FROM audit_logs WHERE user_id = $1', [userId]);
+      }
+    }
+
+    const sysTbl = await client.query("SELECT to_regclass('public.system_settings') AS reg");
+    if (sysTbl.rows[0] && sysTbl.rows[0].reg) {
+      const sysCol = await client.query("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='system_settings' AND column_name='updated_by') AS has_col");
+      const hasSysUpdatedBy = sysCol.rows[0] && sysCol.rows[0].has_col;
+      if (hasSysUpdatedBy) {
+        await client.query('DELETE FROM system_settings WHERE updated_by = $1', [userId]);
+      }
+    }
+
+    // 8) Finally remove role assignments
+    await client.query('DELETE FROM user_role_assignments WHERE user_id = $1', [userId]);
 
     const r = await client.query('DELETE FROM users WHERE user_id = $1 RETURNING user_id', [userId]);
     if (r.rows.length === 0) {
@@ -506,7 +557,12 @@ router.post('/admin/users/:id/force-delete', authEmployee, requireRoles('admin')
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (e) { /* ignore */ }
     if (err && err.code === '23503') {
-      return res.status(400).json({ message: 'Force delete failed due to dependent constraints' });
+      return res.status(400).json({
+        message: 'Force delete failed due to dependent constraints',
+        detail: err.detail || undefined,
+        table: err.table || undefined,
+        constraint: err.constraint || undefined,
+      });
     }
     next(err);
   } finally {
