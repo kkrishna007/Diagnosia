@@ -215,6 +215,7 @@ router.get('/lab/worklist', authEmployee, requireRoles('lab_technician', 'lab_ma
 router.get('/lab/panels/:test_code', authEmployee, requireRoles('lab_technician', 'lab_manager', 'admin'), labController.getPanel);
 router.post('/lab/results', authEmployee, requireRoles('lab_technician', 'lab_manager', 'admin'), labController.saveResult);
 router.get('/lab/results/:appointment_test_id', authEmployee, requireRoles('lab_technician', 'lab_manager', 'admin'), labController.getResult);
+router.post('/lab/generate-interpretation', authEmployee, requireRoles('lab_technician', 'lab_manager', 'admin'), labController.generateInterpretation);
 
 // Admin overview
 router.get('/admin/overview', authEmployee, requireRoles('admin'), async (req, res) => {

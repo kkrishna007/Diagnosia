@@ -58,12 +58,33 @@ export const getAppointments = async (req, res, next) => {
 export const getTestResults = async (req, res, next) => {
   try {
     const results = await pool.query(
-  `SELECT tr.*, t.test_name, t.test_code, s.sample_code, s.collected_at, at.appointment_id, a.appointment_date, a.appointment_time
+  `SELECT 
+        tr.*, 
+        t.test_name, t.test_code, 
+        s.sample_code, s.collected_at, 
+        at.appointment_id, 
+        a.appointment_date, a.appointment_time,
+        CASE 
+          WHEN trim(COALESCE(uproc.first_name,'') || ' ' || COALESCE(uproc.last_name,'')) <> '' 
+            THEN trim(COALESCE(uproc.first_name,'') || ' ' || COALESCE(uproc.last_name,''))
+          WHEN uproc.email IS NOT NULL THEN uproc.email
+          WHEN uproc.user_id IS NOT NULL THEN 'User ' || uproc.user_id::text
+          ELSE NULL
+        END AS processed_by_name,
+        CASE 
+          WHEN trim(COALESCE(uver.first_name,'') || ' ' || COALESCE(uver.last_name,'')) <> '' 
+            THEN trim(COALESCE(uver.first_name,'') || ' ' || COALESCE(uver.last_name,''))
+          WHEN uver.email IS NOT NULL THEN uver.email
+          WHEN uver.user_id IS NOT NULL THEN 'User ' || uver.user_id::text
+          ELSE NULL
+        END AS verified_by_name
        FROM test_results tr
        JOIN samples s ON tr.sample_id = s.sample_id
        JOIN appointment_tests at ON s.appointment_test_id = at.appointment_test_id
        JOIN tests t ON tr.test_code = t.test_code
        JOIN appointments a ON at.appointment_id = a.appointment_id
+       LEFT JOIN users uproc ON uproc.user_id = tr.processed_by
+       LEFT JOIN users uver  ON uver.user_id  = tr.verified_by
        WHERE a.patient_id = $1
        ORDER BY tr.processed_at DESC`,
       [req.user.user_id]

@@ -3,6 +3,22 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeFlagsForPanel } from '../utils/computeFlags.js';
+// AI generation
+let genState = null;
+async function getGenModel() {
+  if (genState) return genState;
+  try {
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) return null;
+    const genAI = new GoogleGenerativeAI(key);
+    const modelIds = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'];
+    genState = { genAI, modelIds };
+    return genState;
+  } catch (e) {
+    return null;
+  }
+}
 
 let panels = {};
 try {
@@ -31,7 +47,8 @@ export async function getWorklist(req, res, next) {
         SELECT * FROM test_results tr WHERE tr.appointment_test_id = at.appointment_test_id
         ORDER BY tr.processed_at DESC NULLS LAST LIMIT 1
       ) tr ON true
-      WHERE at.status = 'sample_collected' OR a.status = 'sample_collected'
+      WHERE at.status IN ('sample_collected','reported')
+         OR a.status IN ('sample_collected','completed')
       ORDER BY a.appointment_date DESC, at.appointment_test_id ASC
     `;
     const r = await pool.query(q);
@@ -89,7 +106,7 @@ export async function getPanel(req, res, next) {
 // POST /employee/lab/results
 export async function saveResult(req, res, next) {
   try {
-    const { appointment_test_id, result_values, comment } = req.body;
+  const { appointment_test_id, result_values, comment, interpretation: interpIn, recommendation: recIn, recommendations: recPluralIn } = req.body;
     if (!appointment_test_id || !result_values || typeof result_values !== 'object') {
       return res.status(400).json({ message: 'appointment_test_id and result_values are required' });
     }
@@ -128,13 +145,21 @@ export async function saveResult(req, res, next) {
     if (sres.rows.length) sampleId = sres.rows[0].sample_id;
 
     const insertQ = `
-      INSERT INTO test_results (appointment_test_id, sample_id, test_code, processed_by, result_values, reference_ranges, abnormal_flags, interpretation, result_status, processed_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'final',NOW()) RETURNING *
+      INSERT INTO test_results (
+        appointment_test_id, sample_id, test_code,
+        processed_by, verified_by,
+        result_values, reference_ranges, abnormal_flags,
+        interpretation, recommendations,
+        result_status, processed_at, verified_at
+      )
+      VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,'final',NOW(),NOW())
+      RETURNING *
     `;
     const processedBy = req.user?.user_id || null;
     const referenceRanges = panel ? { parameters: panel.parameters } : null;
-    const interp = comment || null;
-    const ir = await pool.query(insertQ, [appointment_test_id, sampleId, at.test_code, processedBy, result_values, referenceRanges, abnormal_flags, interp]);
+    const interp = (interpIn ?? comment) || null;
+    const rec = (recIn ?? recPluralIn) || null;
+  const ir = await pool.query(insertQ, [appointment_test_id, sampleId, at.test_code, processedBy, result_values, referenceRanges, abnormal_flags, interp, rec]);
 
     // update appointment_test status to 'reported' or similar
     await pool.query('UPDATE appointment_tests SET status = $1 WHERE appointment_test_id = $2', ['reported', appointment_test_id]);
@@ -150,4 +175,59 @@ export async function saveResult(req, res, next) {
   }
 }
 
-export default { getWorklist, getPanel, saveResult };
+// POST /employee/lab/generate-interpretation
+export async function generateInterpretation(req, res, next) {
+  try {
+    const model = await getGenModel();
+    if (!model) return res.status(500).json({ message: 'AI model not configured. Set GEMINI_API_KEY.' });
+
+    const { patient, test, results } = req.body || {};
+    if (!results) return res.status(400).json({ message: 'results are required' });
+
+    const prompt = [
+      'You are a certified Pathologist for a clinical laboratory. Based on the provided patient profile, test details, and measured parameters, provide:',
+      '1) Interpretation: concise clinical interpretation highlighting abnormal/borderline values, potential differentials, and clinical correlation.',
+      '2) Recommendation: clear, actionable next steps, follow-up tests, critical thresholds for escalation, and monitoring guidance.',
+      '',
+      'Constraints:',
+      '- Be specific to the values and reference ranges provided. Do not restate all raw values.',
+      '- Avoid generic disclaimers and avoid revealing internal reasoning. Do not include markdown or extra commentary.',
+      '- Keep each field under 250 words.',
+      '',
+      'Return a strict JSON object with exactly these keys: "interpretation" and "recommendation".',
+      '',
+      'Patient:', JSON.stringify(patient || {}),
+      'Test:', JSON.stringify(test || {}),
+      'PanelParameters:', JSON.stringify(results?.panel || []),
+      'MeasuredValues:', JSON.stringify(results?.values || results),
+    ].join('\n');
+
+    const { genAI, modelIds } = model;
+    let lastErr = null;
+    for (const id of modelIds) {
+      try {
+        const m = genAI.getGenerativeModel({ model: id });
+        const ai = await m.generateContent([{ text: prompt }]);
+        const text = (ai?.response?.text?.() || '').trim();
+        const cleaned = text.replace(/^```json|^```|```$/g, '').trim();
+        let parsed;
+        try { parsed = JSON.parse(cleaned); } catch (e) {
+          const mm = cleaned.match(/\{[\s\S]*\}/);
+          if (mm) parsed = JSON.parse(mm[0]);
+        }
+        if (parsed && parsed.interpretation && parsed.recommendation) {
+          return res.json({ interpretation: parsed.interpretation, recommendation: parsed.recommendation });
+        }
+        lastErr = new Error('AI response incomplete');
+      } catch (e) {
+        lastErr = e;
+        continue;
+      }
+    }
+    return res.status(400).json({ message: lastErr?.message || 'Failed to generate interpretation' });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export default { getWorklist, getPanel, saveResult, generateInterpretation };

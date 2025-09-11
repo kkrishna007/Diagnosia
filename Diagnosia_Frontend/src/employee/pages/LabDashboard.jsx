@@ -61,10 +61,6 @@ export default function LabDashboard() {
         <ResultForm
           appointmentTest={active}
           readOnly={active.has_result}
-          onSaved={(result) => {
-            // update local worklist state: mark this item as having a result
-            setWorklist(list => list.map(it => it.appointment_test_id === active.appointment_test_id ? { ...it, has_result: true, result_id: result?.result_id || result?.id || null, result_values: result?.result_values || null } : it));
-          }}
           onClose={() => { setActive(null); load(); }}
         />
       )}

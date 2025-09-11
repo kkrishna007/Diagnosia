@@ -150,6 +150,10 @@ export const apiService = {
       const token = localStorage.getItem('employee_token');
       return api.get(`/employee/lab/results/${appointmentTestId}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
     },
+    generateInterpretation: (payload) => {
+      const token = localStorage.getItem('employee_token');
+      return api.post('/employee/lab/generate-interpretation', payload, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+    },
     getAdminOverview: () => {
       const token = localStorage.getItem('employee_token');
       return api.get('/employee/admin/overview', { headers: { Authorization: token ? `Bearer ${token}` : '' } });

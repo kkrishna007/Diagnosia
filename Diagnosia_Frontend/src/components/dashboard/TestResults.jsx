@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Download, Eye, Calendar, Share2, Search } from 'lucide-react';
+import { FileText, Download, Eye, Calendar, Share2, Search, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
@@ -356,10 +356,25 @@ const TestResults = ({ results, onRefresh }) => {
               </div>
             </div>
 
-            {/* Doctor Comments */}
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <h4 className="font-semibold text-blue-900 mb-2">Doctor's Comments</h4>
-              <p className="text-blue-800 text-sm">{selectedResult?.interpretation || selectedResult?.recommendations || '-'}</p>
+            {/* Interpretation & Recommendation */}
+            <div className="p-4 bg-blue-50 rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-blue-900">Clinical Interpretation</h4>
+                <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  AI Powered
+                </span>
+              </div>
+              <p className="text-blue-800 text-sm whitespace-pre-line">{selectedResult?.interpretation || '-'}</p>
+
+              <h4 className="font-semibold text-blue-900 mt-2">Recommendations</h4>
+              <p className="text-blue-800 text-sm whitespace-pre-line">{selectedResult?.recommendations || '-'}</p>
+
+              {(selectedResult?.verified_by_name || selectedResult?.processed_by_name) && (
+                <div className="text-xs text-blue-900/80 pt-2 border-t border-blue-100">
+                  Verified by: <span className="font-medium">{selectedResult?.verified_by_name || selectedResult?.processed_by_name}</span>
+                </div>
+              )}
             </div>
 
             {/* Lab Information */}
