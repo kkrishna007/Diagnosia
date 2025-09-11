@@ -152,7 +152,14 @@ export const apiService = {
     },
     generateInterpretation: (payload) => {
       const token = localStorage.getItem('employee_token');
-      return api.post('/employee/lab/generate-interpretation', payload, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+      return api.post(
+        '/employee/lab/generate-interpretation',
+        payload,
+        {
+          headers: { Authorization: token ? `Bearer ${token}` : '' },
+          timeout: 30000, // 30s only for this Gemini request
+        }
+      );
     },
     getAdminOverview: () => {
       const token = localStorage.getItem('employee_token');

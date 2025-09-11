@@ -178,6 +178,10 @@ export async function saveResult(req, res, next) {
 // POST /employee/lab/generate-interpretation
 export async function generateInterpretation(req, res, next) {
   try {
+  // Allow up to 30s for this long-running AI request
+  try { res.setTimeout(30000); /* 30s */ } catch {}
+  try { req.setTimeout?.(30000); } catch {}
+
     const model = await getGenModel();
     if (!model) return res.status(500).json({ message: 'AI model not configured. Set GEMINI_API_KEY.' });
 

@@ -6,6 +6,7 @@ import Button from '../ui/Button';
 import Input from '../ui/input';
 import Modal from '../ui/Modal';
 import { useAuth } from '../../hooks/useAuth';
+import { generateTestReportPDF } from '../../utils/pdf';
 
 const TestResults = ({ results, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -39,10 +40,13 @@ const TestResults = ({ results, onRefresh }) => {
     setShowReportModal(true);
   };
 
-  const handleDownloadReport = (result) => {
-    // Simulate download
-    console.log(`Downloading report for ${result.testName}`);
-    // In a real app, this would trigger a file download
+  const handleDownloadReport = async (result) => {
+    try {
+      await generateTestReportPDF({ result, user });
+    } catch (e) {
+      console.error('Failed to generate PDF report:', e);
+      alert('Unable to generate PDF. Please try again.');
+    }
   };
 
   const handleShareReport = (result) => {
@@ -375,13 +379,6 @@ const TestResults = ({ results, onRefresh }) => {
                   Verified by: <span className="font-medium">{selectedResult?.verified_by_name || selectedResult?.processed_by_name}</span>
                 </div>
               )}
-            </div>
-
-            {/* Lab Information */}
-            <div className="text-center text-xs text-gray-500 border-t pt-4">
-              <p className="font-medium">{currentReportData?.labInfo?.name || 'Diagnosia Lab'}</p>
-              <p>{currentReportData?.labInfo?.address || ''}</p>
-              <p>Phone: {currentReportData?.labInfo?.phone || ''}</p>
             </div>
 
             {/* Modal Actions */}
