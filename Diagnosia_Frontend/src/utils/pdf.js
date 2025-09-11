@@ -8,11 +8,20 @@ import logoUrl from '../assets/logo.png';
 const BRAND_BLUE = [37, 99, 235]; // blue-600
 const BRAND_GREEN = [16, 185, 129]; // emerald-500
 const TEXT_MUTED = 100;
-let UNICODE_FONT_READY = false;
-let UNICODE_FONT_FAMILY = null; // 'roboto' | 'notosans' | null
+// Unicode font cache: keep base64 once, but register into EACH doc instance
+let UNICODE_FONT_BASE64 = null; // base64 string of the font file
+let UNICODE_FONT_FAMILY = null; // e.g., 'roboto'
 
 async function ensureUnicodeFont(doc) {
-  if (UNICODE_FONT_READY) return true;
+  // If we already have the font data, (re)register into this document
+  if (UNICODE_FONT_BASE64 && UNICODE_FONT_FAMILY) {
+    try {
+      const fileName = 'Roboto-Variable.ttf';
+      doc.addFileToVFS(fileName, UNICODE_FONT_BASE64);
+      doc.addFont(fileName, UNICODE_FONT_FAMILY, 'normal');
+      return true;
+    } catch {}
+  }
   let base = '/';
   try { base = (import.meta && import.meta.env && import.meta.env.BASE_URL) || '/'; } catch {}
   // Try local Roboto variable fonts via multiple robust URL candidates
@@ -23,6 +32,9 @@ async function ensureUnicodeFont(doc) {
     'Roboto-Italic-VariableFont_wdth,wght.ttf',
   ];
   const candidates = [];
+  // Use static public paths first so both pages use the exact same method
+  candidates.push('/fonts/Roboto-VariableFont_wdth,wght.ttf');
+  candidates.push('/fonts/Roboto-Italic-VariableFont_wdth,wght.ttf');
   for (const file of fontFiles) {
     // Absolute from root and base-prefixed
     candidates.push(`/fonts/${file}`);
@@ -47,7 +59,7 @@ async function ensureUnicodeFont(doc) {
       const fName = 'roboto';
       doc.addFileToVFS(fileName, base64);
       doc.addFont(fileName, fName, 'normal');
-      UNICODE_FONT_READY = true;
+      UNICODE_FONT_BASE64 = base64;
       UNICODE_FONT_FAMILY = fName;
       return true;
     } catch {
@@ -57,19 +69,21 @@ async function ensureUnicodeFont(doc) {
   // If we got here, all sources failed — log once to help diagnose
   try {
   // eslint-disable-next-line no-console
-  console.warn('[pdf] Unicode font load failed. Falling back to "INR". Ensure /public/fonts/Roboto-VariableFont_wdth,wght.ttf is served at /fonts and matches your BASE_URL.');
+  console.warn('[pdf] Unicode font load failed. Ensure /public/fonts/Roboto-VariableFont_wdth,wght.ttf is served at /fonts and matches your BASE_URL.');
   } catch {}
   return false;
 }
 
 function inr(amount) {
-  // Use ₹ if unicode font is active, else fall back to 'INR'
+  // Always use the rupee symbol for consistency across pages
   const n = Number(amount || 0);
   const num = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(n);
-  return UNICODE_FONT_READY ? `₹${num}` : `INR ${num}`;
+  return `₹${num}`;
 }
 
 function getTimeSlotLabel(id) {
+  if (id === undefined || id === null || id === '') return '-';
+  const raw = String(id).trim();
   const map = {
     '6-8': '6:00 AM - 8:00 AM',
     '8-10': '8:00 AM - 10:00 AM',
@@ -79,7 +93,34 @@ function getTimeSlotLabel(id) {
     '16-18': '4:00 PM - 6:00 PM',
     '18-20': '6:00 PM - 8:00 PM',
   };
-  return map[id] || id || '-';
+  if (map[raw]) return map[raw];
+
+  const fmt = (h) => {
+    const hour = Math.max(0, Math.min(23, Number(h)));
+    const hr12 = ((hour + 11) % 12) + 1;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    return `${hr12}:00 ${ampm}`;
+  };
+
+  // Handle range like "16-18" or "4-6"
+  const range = raw.match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (range) {
+    const [, s, e] = range;
+    return `${fmt(s)} - ${fmt(e)}`;
+  }
+
+  // Handle single time like "16", "16:00", or "16:00:00" -> snap to standard slots
+  const single = raw.match(/^(\d{1,2})(?::(\d{2}))?(?::\d{2})?$/);
+  if (single) {
+    const hour = Math.max(0, Math.min(23, parseInt(single[1], 10)));
+    const slots = [ [6,8], [8,10], [10,12], [12,14], [14,16], [16,18], [18,20] ];
+    const hit = slots.find(([s, e]) => hour >= s && hour < e);
+    if (hit) return `${fmt(hit[0])} - ${fmt(hit[1])}`;
+    return fmt(hour);
+  }
+
+  // Unknown format: return as-is
+  return raw || '-';
 }
 
 function loadImage(url) {
@@ -219,9 +260,29 @@ export async function generateBookingReceipt({ booking, test }) {
   y = doc.lastAutoTable.finalY + 12;
 
   const apptRows = [
-    ['Type', booking.appointmentType === 'home_collection' ? 'Home Collection' : 'Lab Visit'],
-    ['Date', fmtDate(booking.selectedDate)],
-    ['Time', getTimeSlotLabel(booking.selectedTimeSlot)],
+    ['Type', (booking.appointmentType || booking.appointment_type) === 'home_collection' ? 'Home Collection' : 'Lab Visit'],
+    [
+      'Date',
+      fmtDate(
+        booking.selectedDate ||
+        booking.date ||
+        booking.appointmentDate ||
+        booking.appointment_date
+      ),
+    ],
+    [
+      'Time',
+      getTimeSlotLabel(
+        booking.selectedTimeSlot ||
+        booking.selected_time_slot ||
+        booking.selectedTime ||
+        booking.time ||
+        booking.appointmentTime ||
+        booking.appointment_time ||
+        booking.slot ||
+        booking.time_slot
+      ),
+    ],
   ];
   if (booking.appointmentType === 'home_collection' && booking.address) {
     apptRows.push(['Address', booking.address]);
@@ -275,6 +336,13 @@ export async function generateBookingReceipt({ booking, test }) {
   const amountText = inr(totalPaid);
   const prevFont = 'helvetica';
   const unicodeFont = UNICODE_FONT_FAMILY || prevFont;
+  // Register the font into this doc if cached (extra safety)
+  if (UNICODE_FONT_BASE64 && UNICODE_FONT_FAMILY) {
+    try {
+      doc.addFileToVFS('Roboto-Variable.ttf', UNICODE_FONT_BASE64);
+      doc.addFont('Roboto-Variable.ttf', UNICODE_FONT_FAMILY, 'normal');
+    } catch {}
+  }
   doc.setFont(unicodeFont, 'normal');
   doc.setFontSize(12);
   const amtWidth = doc.getTextWidth(amountText);
