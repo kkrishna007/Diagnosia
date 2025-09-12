@@ -62,6 +62,12 @@ function CollectorDashboard() {
     } finally { setActionLoading((s) => ({ ...s, [taskId]: false })); }
   }
 
+  // Only show appointments with status 'booked'
+  const visibleTasks = tasks.filter((t) => {
+    const s = String(t.appointment_status || t.status || t.test_status || '').toLowerCase();
+    return s === 'booked';
+  });
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -76,9 +82,9 @@ function CollectorDashboard() {
       {loading && <div>Loading tasks…</div>}
   {info && <div className="text-green-700 mb-2">{info}</div>}
       {error && <div className="text-red-600 mb-2">{error}</div>}
-      {!loading && tasks.length === 0 && <div>No tasks assigned or available.</div>}
+      {!loading && visibleTasks.length === 0 && <div>No booked appointments.</div>}
       <div className="space-y-3">
-        {tasks.map((t) => {
+        {visibleTasks.map((t) => {
           // prefer task_id (collection_tasks) otherwise use appointment_test_id
           const id = t.task_id || t.appointment_test_id || null;
           const isCollected = ['collected', 'sample_collected'].includes(t.status) || ['collected', 'sample_collected'].includes(t.test_status);

@@ -97,6 +97,8 @@ export const apiService = {
     create: (bookingData) => api.post('/bookings', bookingData),
     getById: (id) => api.get(`/bookings/${id}`),
     update: (id, data) => api.put(`/bookings/${id}`, data),
+    // Reschedule an existing booking (matches backend: PATCH /bookings/:id/reschedule)
+    reschedule: (id, data) => api.patch(`/bookings/${id}/reschedule`, data),
     cancel: (id) => api.delete(`/bookings/${id}`),
     getAvailableSlots: (date, testId) => 
       api.get(`/bookings/slots?date=${date}&testId=${testId}`),

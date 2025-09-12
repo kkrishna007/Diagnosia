@@ -413,17 +413,34 @@ export async function generateBookingReceipt({ booking, test }) {
 export async function generateTestReportPDF({ result, user }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 40;
   let y = margin;
 
   await ensureUnicodeFont(doc);
 
+  // Footer reservation so content never overlaps the footer
+  const FOOTER_BASELINE = 18; // distance from bottom where footer baseline sits
+  const FOOTER_SPACE = 30; // total space to reserve at page bottom for footer
+  const contentBottomY = () => doc.internal.pageSize.getHeight() - FOOTER_SPACE;
+
+  // Helper: draw the top accent bars on current page
+  const drawHeaderBars = () => {
+    doc.setFillColor(...BRAND_BLUE);
+    doc.rect(0, 0, pageWidth, 6, 'F');
+    doc.setFillColor(...BRAND_GREEN);
+    doc.rect(0, 6, pageWidth, 3, 'F');
+  };
+
+  // Helper: ensure there is enough vertical space; if not, add a page and reset y
+  const ensureSpace = (needed) => {
+    if (y + needed <= contentBottomY()) return;
+    doc.addPage();
+    drawHeaderBars();
+    y = margin;
+  };
+
   // Header accent
-  doc.setFillColor(...BRAND_BLUE);
-  doc.rect(0, 0, pageWidth, 6, 'F');
-  doc.setFillColor(...BRAND_GREEN);
-  doc.rect(0, 6, pageWidth, 3, 'F');
+  drawHeaderBars();
 
   // Letterhead with logo and brand
   try {
@@ -478,32 +495,43 @@ export async function generateTestReportPDF({ result, user }) {
   );
   doc.setFillColor(245);
   doc.setDrawColor(220);
-  doc.roundedRect(pageWidth - margin - 280, y - 16, 280, 24, 6, 6, 'FD');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
+  const reportLabel = `Report ID: ${String(reportId)}`;
+  const padX = 12;
+  const textW = doc.getTextWidth(reportLabel);
+  const rectW = Math.min(260, Math.max(140, Math.round(textW + padX * 2))); // tighter, right-aligned
+  const rectX = pageWidth - margin - rectW;
+  doc.roundedRect(rectX, y - 16, rectW, 24, 6, 6, 'FD');
   doc.setTextColor(...BRAND_BLUE);
-  doc.text(`Report ID: ${String(reportId)}`, pageWidth - margin - 270, y);
+  doc.text(reportLabel, rectX + padX, y);
   doc.setTextColor(0);
   y += 18;
 
-  // Test overview: show description under test name and keep the card compact
+  // Test overview: compact card with symmetric paddings
   const desc = result?.test_description || result?.description || '';
   const availableW = pageWidth - margin * 2 - 24;
   const wrappedDesc = desc ? doc.splitTextToSize(desc, availableW) : [];
-  const titleLineH = 18; // approximate
-  const descBlockH = wrappedDesc.length > 0 ? wrappedDesc.length * 12 + 6 : 0;
-  const boxH = 16 + titleLineH + (desc ? 8 : 0) + descBlockH + 8; // paddings + title + desc
+  const PAD_Y = 10; // top/bottom padding
+  const TITLE_LINE_H = 16; // approximate height for title
+  const DESC_LINE_H = 12; // line height for description
+  const GAP = desc ? 6 : 0; // gap between title and description
+  const descBlockH = wrappedDesc.length > 0 ? wrappedDesc.length * DESC_LINE_H : 0;
+  const boxH = PAD_Y + TITLE_LINE_H + GAP + descBlockH + PAD_Y;
   doc.setDrawColor(230);
   doc.roundedRect(margin, y, pageWidth - margin * 2, boxH, 8, 8);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.text(testName, margin + 12, y + 16 + 12);
+  // Title baseline
+  doc.text(testName, margin + 12, y + PAD_Y + 12);
   if (desc) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10); // slightly smaller to keep the box small
-    doc.text(wrappedDesc, margin + 12, y + 16 + 12 + 8 + 12); // below title
+    doc.setFontSize(10);
+    // Description baseline starts after title + gap
+    doc.text(wrappedDesc, margin + 12, y + PAD_Y + TITLE_LINE_H + GAP + 10);
   }
-  y += boxH + 12;
+  // Reduce space after the card slightly
+  y += boxH + 8;
 
   // Helpers
   const formatDate = (dateString) => {
@@ -525,13 +553,25 @@ export async function generateTestReportPDF({ result, user }) {
     } catch { return undefined; }
   };
 
-  // Patient & Sample information tables
+  // Patient & Sample information tables (side by side)
   const patientName = `${user?.first_name || user?.firstName || ''} ${user?.last_name || ''}`.trim() || 'Patient';
   const patientAge = user?.date_of_birth ? ageFromDOB(user.date_of_birth) : undefined;
   const patientGender = user?.gender || user?.sex || '-';
   const collectionDate = result?.collected_at || result?.collection_date || result?.collectionDate || '-';
   const reportDate = result?.processed_at || result?.reported_at || result?.reportDate || result?.completed_at || result?.created_at || '-';
 
+  const gutter = 16;
+  const totalInnerW = pageWidth - margin * 2 - gutter;
+  const leftTableW = Math.floor(totalInnerW / 2);
+  const rightTableW = totalInnerW - leftTableW; // ensure exact sum
+  const leftX = margin;
+  const rightX = margin + leftTableW + gutter;
+
+  // Label column widths: keep Patient compact, give Sample more room
+  const labelWPatient = 60;
+  const labelWSample = 90; // wider to avoid wrapping of "Report Date"/"Sample ID"
+
+  // Left: Patient table
   doc.autoTable({
     startY: y,
     head: [['Patient', 'Details']],
@@ -543,12 +583,14 @@ export async function generateTestReportPDF({ result, user }) {
     theme: 'grid',
     styles: { font: 'helvetica', fontSize: 10, cellPadding: 6 },
     headStyles: { fillColor: BRAND_GREEN, textColor: 255, fontStyle: 'bold' },
-    columnStyles: { 0: { cellWidth: 120, fontStyle: 'bold' }, 1: { cellWidth: pageWidth - margin * 2 - 120 } },
-    margin: { left: margin, right: margin },
-    tableWidth: pageWidth - margin * 2,
+    columnStyles: { 0: { cellWidth: labelWPatient, fontStyle: 'bold' }, 1: { cellWidth: leftTableW - labelWPatient } },
+    margin: { left: leftX, bottom: FOOTER_SPACE },
+    tableWidth: leftTableW,
+    didDrawPage: () => drawHeaderBars(),
   });
-  y = doc.lastAutoTable.finalY + 12;
+  const leftFinalY = doc.lastAutoTable.finalY;
 
+  // Right: Sample table (wider label column, narrower details column)
   doc.autoTable({
     startY: y,
     head: [['Sample', 'Details']],
@@ -559,12 +601,14 @@ export async function generateTestReportPDF({ result, user }) {
     ],
     theme: 'grid',
     styles: { font: 'helvetica', fontSize: 10, cellPadding: 6 },
-    headStyles: { fillColor: BRAND_BLUE, textColor: 255, fontStyle: 'bold' },
-    columnStyles: { 0: { cellWidth: 120, fontStyle: 'bold' }, 1: { cellWidth: pageWidth - margin * 2 - 120 } },
-    margin: { left: margin, right: margin },
-    tableWidth: pageWidth - margin * 2,
+    headStyles: { fillColor: BRAND_GREEN, textColor: 255, fontStyle: 'bold' },
+    columnStyles: { 0: { cellWidth: labelWSample, fontStyle: 'bold' }, 1: { cellWidth: rightTableW - labelWSample } },
+    margin: { left: rightX, bottom: FOOTER_SPACE },
+    tableWidth: rightTableW,
+    didDrawPage: () => drawHeaderBars(),
   });
-  y = doc.lastAutoTable.finalY + 18;
+  const rightFinalY = doc.lastAutoTable.finalY;
+  y = Math.max(leftFinalY, rightFinalY) + 18;
 
   // Build parameters table from result
   const values = result?.result_values || {};
@@ -625,17 +669,31 @@ export async function generateTestReportPDF({ result, user }) {
 
   // Results table
   const tableW = pageWidth - margin * 2; // keep identical to the top tables
-  const paramW = 120; // match the "label" column width used in Patient/Sample tables
+  const paramW = 140; // increased Parameter column for better readability
   const remaining = tableW - paramW;
-  let unitW = Math.max(56, Math.round(remaining * 0.10)); // compact but readable
-  let rangeW = Math.round(remaining * 0.30); // moderate width for ranges
-  let resultW = Math.round(remaining * 0.34); // reduced result width
+  // Increase Unit width further and reduce Status to balance
+  let unitW = Math.max(80, Math.round(remaining * 0.18)); // ~18% with 80px minimum
+  let rangeW = Math.round(remaining * 0.30); // keep ranges readable
+  let resultW = Math.round(remaining * 0.26); // reduced to balance wider Parameter
   let statusW = remaining - (unitW + rangeW + resultW); // fill remainder
-  // Ensure a sensible minimum for status; borrow space from result if needed
-  if (statusW < 72) {
-    const deficit = 72 - statusW;
-    resultW = Math.max(100, resultW - deficit);
-    statusW = 72;
+  // Prefer a smaller Status width; cap and floor with sensible bounds
+  const STATUS_MAX = 56; // tighter cap to visually reduce the Status column
+  const STATUS_MIN = 48; // minimum to keep labels like "High" readable
+  if (statusW > STATUS_MAX) {
+    // Reduce status; drift fix below will allocate leftover to range
+    statusW = STATUS_MAX;
+  }
+  if (statusW < STATUS_MIN) {
+    const deficit = STATUS_MIN - statusW;
+    const borrow = Math.min(deficit, Math.max(0, resultW - 96)); // don't shrink result below 96px
+    if (borrow > 0) {
+      resultW -= borrow;
+      statusW += borrow;
+    }
+    if (statusW < STATUS_MIN) {
+      // Final clamp; drift correction below will take care of balancing
+      statusW = STATUS_MIN;
+    }
   }
   // Fix rounding drift so columns sum exactly to table width
   const sum = paramW + unitW + rangeW + resultW + statusW;
@@ -658,7 +716,7 @@ export async function generateTestReportPDF({ result, user }) {
       3: { cellWidth: rangeW },
       4: { cellWidth: statusW, halign: 'center', fontStyle: 'bold' },
     },
-    margin: { left: margin, right: margin },
+    margin: { left: margin, right: margin, bottom: FOOTER_SPACE },
     tableWidth: pageWidth - margin * 2,
     didParseCell: function (data) {
       if (data.section === 'body' && data.column.index === 4) {
@@ -675,6 +733,7 @@ export async function generateTestReportPDF({ result, user }) {
         }
       }
     },
+    didDrawPage: () => drawHeaderBars(),
   });
   y = doc.lastAutoTable.finalY + 16;
 
@@ -690,23 +749,46 @@ export async function generateTestReportPDF({ result, user }) {
     doc.setFontSize(10);
     const innerW = pageWidth - margin * 2 - 24;
     const wrap = doc.splitTextToSize(content, innerW);
+    const lineH = 10;
     const titleH = 14;
-    const bodyH = wrap.length * 10 + 6; // smaller line height
-    const boxH2 = 12 + titleH + 6 + bodyH + 8; // padding
-    doc.setDrawColor(225);
-    doc.setFillColor(248);
-    doc.roundedRect(margin, y, pageWidth - margin * 2, boxH2, 8, 8, 'FD');
-    // Title
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor(...accentColor);
-    doc.text(titleText, margin + 12, y + 16);
-    // Body
-    doc.setTextColor(0);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text(wrap, margin + 12, y + 16 + 6 + 12);
-    y += boxH2 + 10;
+    const fixed = 12 + titleH + 6 + 8; // paddings + title + paddings (no body)
+
+    let i = 0;
+    while (i < wrap.length || (i === 0 && wrap.length === 0)) {
+      // Calculate how many lines can fit on this page
+      let available = contentBottomY() - y;
+      if (available < fixed + lineH + 6) {
+        ensureSpace(fixed + lineH + 6);
+        available = contentBottomY() - y;
+      }
+      const maxLines = Math.max(1, Math.floor((available - fixed - 6) / lineH));
+      const chunk = wrap.slice(i, i + maxLines);
+      const bodyH = chunk.length * lineH + 6;
+      const boxH2 = fixed + bodyH;
+
+      // Draw box
+      doc.setDrawColor(225);
+      doc.setFillColor(248);
+      doc.roundedRect(margin, y, pageWidth - margin * 2, boxH2, 8, 8, 'FD');
+
+      // Title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...accentColor);
+      const titleTextFinal = (i > 0 ? `${titleText} (cont.)` : titleText);
+      doc.text(titleTextFinal, margin + 12, y + 16);
+
+      // Body
+      doc.setTextColor(0);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      if (chunk.length > 0) {
+        doc.text(chunk, margin + 12, y + 16 + 6 + 12);
+      }
+      y += boxH2 + 10;
+      i += chunk.length;
+      if (wrap.length === 0) break; // for empty text
+    }
   };
 
   if (interpretation) drawBoxedSection('Clinical Interpretation', interpretation, BRAND_BLUE);
@@ -716,9 +798,10 @@ export async function generateTestReportPDF({ result, user }) {
   }
 
   if (verifiedBy) {
-  // add a little breathing room above the verifier line
-  y += 12;
-  doc.setFont('helvetica', 'normal');
+    // add a little breathing room above the verifier line
+    ensureSpace(28);
+    y += 12;
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(80);
     doc.text(`Verified by: ${verifiedBy}`, margin, y);
@@ -727,10 +810,18 @@ export async function generateTestReportPDF({ result, user }) {
   }
 
   // Footer
-  const footerY = pageHeight - 18;
-  doc.setFontSize(10);
-  doc.setTextColor(120);
-  doc.text('This is a computer-generated report. For assistance, contact support@diagnosia.com.', margin, footerY);
+  const footerText = 'This is a computer-generated report. For assistance, contact support@diagnosia.com.';
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    const ph = doc.internal.pageSize.getHeight();
+    const pw = doc.internal.pageSize.getWidth();
+    const footerY = ph - FOOTER_BASELINE;
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    // Center aligned footer text
+    doc.text(footerText, pw / 2, footerY, { align: 'center' });
+  }
 
   // File name: PatientName_TestName_Report.pdf (sanitize to safe characters)
   const sanitize = (s) => String(s || '')
