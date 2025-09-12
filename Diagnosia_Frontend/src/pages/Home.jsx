@@ -3,13 +3,10 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, TestTube, Clock, MapPin, Shield, Star, CheckCircle, Users, Award, TrendingUp } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import TextType from '../components/ui/TextType';
 
-import { useEffect, useState } from 'react';
-import { testService } from '../services/testService';
 
 const Home = () => {
-  const [popularTests, setPopularTests] = useState([]);
-  const [loading, setLoading] = useState(true);
   const features = [
     {
       icon: MapPin,
@@ -32,23 +29,7 @@ const Home = () => {
       description: 'Wide range of blood tests, health packages, and specialized diagnostic services.'
     }
   ];
-
-
-  useEffect(() => {
-    const fetchPopularTests = async () => {
-      setLoading(true);
-      try {
-        const response = await testService.getAllTests();
-        // Filter for popular tests if the backend provides a flag, else show all
-        const tests = response.data.filter(t => t.isPopular || t.popular);
-        setPopularTests(tests.length > 0 ? tests : response.data.slice(0, 4));
-      } catch (err) {
-        setPopularTests([]);
-      }
-      setLoading(false);
-    };
-    fetchPopularTests();
-  }, []);
+  
 
   const stats = [
     { icon: Users, value: '50,000+', label: 'Happy Customers' },
@@ -78,13 +59,7 @@ const Home = () => {
     }
   ];
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(price);
-  };
+  
 
   return (
     <div className="min-h-screen">
@@ -93,10 +68,24 @@ const Home = () => {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-6">
-                Your Health,
-                <span className="text-blue-200"> Our Priority</span>
-              </h1>
+              <TextType
+                as="h1"
+                className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-6"
+                text={[
+                  'Your Health, Our Priority',
+                  'Accurate Tests, Trusted Results',
+                  'Diagnostics Made Simple',
+                  'Where Precision Meets Compassion',
+                  'Health Insights You Can Trust',
+                  'Early Detection, Better Protection'
+                ]}
+                typingSpeed={75}
+                deletingSpeed={30}
+                pauseDuration={1500}
+                showCursor={true}
+                cursorCharacter="|"
+                variableSpeed={{ min: 45, max: 95 }}
+              />
               <p className="text-xl text-blue-100 mb-8 leading-relaxed">
                 Get accurate lab tests with home sample collection. Book online, 
                 get tested at home, and receive digital reports within 24-48 hours.
@@ -193,60 +182,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Popular Tests Section */}
-      <section className="py-20 bg-gray-50">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Popular Health Tests
-            </h2>
-            <p className="text-xl text-gray-600">
-              Most commonly booked tests by our customers
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {loading ? (
-              <div className="col-span-4 text-center text-gray-500">Loading popular tests...</div>
-            ) : popularTests.length === 0 ? (
-              <div className="col-span-4 text-center text-gray-500">No popular tests found.</div>
-            ) : (
-              popularTests.map((test, index) => (
-                <Card key={index} className="p-6 hover:shadow-lg transition-shadow">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <TestTube className="h-5 w-5 text-blue-600" />
-                    </div>
-                    {(test.isPopular || test.popular) && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-600">
-                        <Star className="h-3 w-3 mr-1 fill-current" />
-                        Popular
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{test.test_name || test.name}</h3>
-                  <p className="text-gray-600 text-sm mb-4">{test.test_description || test.description}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl font-bold text-blue-600">{formatPrice(test.base_price || test.price)}</span>
-                    <Link to={`/tests`}>
-                      <Button size="sm">Book Now</Button>
-                    </Link>
-                  </div>
-                </Card>
-              ))
-            )}
-          </div>
-          
-          <div className="text-center mt-12">
-            <Link to="/tests">
-              <Button size="lg">
-                View All Tests
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
+      
 
       {/* Testimonials Section */}
       <section className="py-20">
