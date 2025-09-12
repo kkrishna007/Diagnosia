@@ -3,6 +3,7 @@ import { apiService } from '../../services/api';
 
 export default function ResultForm({ appointmentTest, onClose, readOnly = false }) {
   const [panel, setPanel] = useState(null);
+  // For composite panels, values shape: { components: { [code]: { values: { [key]: val } } } }
   const [values, setValues] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -51,11 +52,40 @@ export default function ResultForm({ appointmentTest, onClose, readOnly = false 
     return () => { mounted = false; };
   }, [appointmentTest, isReadOnly]);
 
-  function onChange(key, v) { if (isReadOnly) return; setValues(s => ({ ...s, [key]: v })); }
+  // Update value for single or composite parameter
+  function onChange(key, v, compCode = null) {
+    if (isReadOnly) return;
+    setValues((s) => {
+      // Non-composite
+      if (!panel?.type || panel?.type !== 'composite' || !compCode) {
+        return { ...s, [key]: v };
+      }
+      const code = String(compCode).toLowerCase();
+      const next = { ...(s || {}) };
+      if (!next.components) next.components = {};
+      if (!next.components[code]) next.components[code] = { values: {} };
+      next.components[code] = {
+        values: { ...(next.components[code]?.values || {}), [key]: v }
+      };
+      return next;
+    });
+  }
 
   const canGenerate = useMemo(() => {
     if (isReadOnly) return false;
     if (!panel) return false;
+    // Composite: require at least one value present across components to enable AI
+    if (panel.type === 'composite') {
+      const comps = panel.component_panels || [];
+      const allKeys = comps.flatMap(c => (c.parameters || []).map(p => ({ code: c.test_code || c.code, key: p.key })));
+      if (allKeys.length === 0) return false;
+      // Be lenient: at least one param entered
+      return allKeys.some(({ code, key }) => {
+        const v = values?.components?.[String(code).toLowerCase()]?.values?.[key];
+        return v !== undefined && v !== null && `${v}`.trim() !== '';
+      });
+    }
+    // Single panel
     const keys = (panel.parameters || []).map(p => p.key);
     if (keys.length === 0) return false;
     return keys.every(k => values[k] !== undefined && values[k] !== null && `${values[k]}`.trim() !== '');
@@ -83,10 +113,9 @@ export default function ResultForm({ appointmentTest, onClose, readOnly = false 
           date: appointmentTest.appointment_date,
           time: appointmentTest.appointment_time,
         },
-        results: {
-          panel: panel?.parameters || [],
-          values,
-        },
+        results: panel?.type === 'composite'
+          ? { values } // server resolves panel; values may be nested
+          : { panel: panel?.parameters || [], values },
       };
       const r = await apiService.employee.generateInterpretation(payload);
       const data = r.data || r;
@@ -138,15 +167,49 @@ export default function ResultForm({ appointmentTest, onClose, readOnly = false 
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded max-w-3xl w-full">
         <h2 className="text-lg font-semibold mb-2">Enter Results — {panel.display_name}</h2>
-        <div className="grid grid-cols-2 gap-3 max-h-72 overflow-auto mb-4">
-          {panel.parameters.map(p => (
-            <div key={p.key}>
-              <label className="block text-sm font-medium">{p.label} {p.unit && <span className="text-xs text-gray-500">({p.unit})</span>}</label>
-              <input className="mt-1 p-2 border rounded w-full" type="text" value={values[p.key] || ''} onChange={e => onChange(p.key, e.target.value)} readOnly={isReadOnly} />
-              <div className="text-xs text-gray-400">{p.notes || ''}</div>
-            </div>
-          ))}
-        </div>
+
+        {panel.type === 'composite' ? (
+          <div className="space-y-4 max-h-96 overflow-auto mb-4">
+            {(panel.component_panels || []).map((comp) => {
+              const code = String(comp.test_code || comp.code || '').toLowerCase();
+              return (
+                <div key={code} className="border rounded">
+                  <div className="px-3 py-2 bg-gray-50 border-b font-medium">{comp.display_name || code.toUpperCase()}</div>
+                  <div className="grid grid-cols-2 gap-3 p-3">
+                    {(comp.parameters || []).map((p) => {
+                      const val = values?.components?.[code]?.values?.[p.key] ?? '';
+                      return (
+                        <div key={`${code}:${p.key}`}>
+                          <label className="block text-sm font-medium">
+                            {p.label} {p.unit && <span className="text-xs text-gray-500">({p.unit})</span>}
+                          </label>
+                          <input
+                            className="mt-1 p-2 border rounded w-full"
+                            type="text"
+                            value={val}
+                            onChange={(e) => onChange(p.key, e.target.value, code)}
+                            readOnly={isReadOnly}
+                          />
+                          <div className="text-xs text-gray-400">{p.notes || ''}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 max-h-72 overflow-auto mb-4">
+            {(panel.parameters || []).map((p) => (
+              <div key={p.key}>
+                <label className="block text-sm font-medium">{p.label} {p.unit && <span className="text-xs text-gray-500">({p.unit})</span>}</label>
+                <input className="mt-1 p-2 border rounded w-full" type="text" value={values[p.key] || ''} onChange={e => onChange(p.key, e.target.value)} readOnly={isReadOnly} />
+                <div className="text-xs text-gray-400">{p.notes || ''}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {!isReadOnly && (
           <div className="mb-4 flex items-center gap-2">

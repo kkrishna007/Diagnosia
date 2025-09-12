@@ -31,6 +31,21 @@ try {
   panels = {};
 }
 
+// Helper: resolve composite panels into full component definitions
+function resolvePanel(panel) {
+  if (!panel) return null;
+  if (panel.type !== 'composite') return panel;
+  const compCodes = Array.isArray(panel.components) ? panel.components : [];
+  const componentPanels = compCodes.map(code => {
+    const key = String(code || '').toLowerCase();
+    const p = panels[key];
+    if (p && p.parameters) return { ...p, test_code: key };
+    // Fallback placeholder when missing
+    return { test_code: key, display_name: key.toUpperCase(), parameters: [] };
+  });
+  return { ...panel, component_panels: componentPanels };
+}
+
 // GET /employee/lab/worklist
 export async function getWorklist(req, res, next) {
   try {
@@ -95,9 +110,10 @@ export async function getResult(req, res, next) {
 export async function getPanel(req, res, next) {
   try {
     const code = (req.params.test_code || '').toLowerCase();
-    const panel = panels[code];
-    if (!panel) return res.status(404).json({ message: 'Panel not found' });
-    res.json(panel);
+    const base = panels[code];
+    if (!base) return res.status(404).json({ message: 'Panel not found' });
+    const resolved = resolvePanel(base);
+    res.json(resolved || base);
   } catch (err) {
     next(err);
   }
@@ -135,8 +151,25 @@ export async function saveResult(req, res, next) {
     const panel = panels[code] || null;
 
     let abnormal_flags = {};
-    if (panel) {
+    let referenceRanges = null;
+    if (panel && panel.type === 'composite') {
+      // Expect nested values: { components: { [code]: { values: { key: val } } } }
+      const comps = Array.isArray(panel.components) ? panel.components : [];
+      const outFlags = {};
+      const outRefs = {};
+      for (const compCode of comps) {
+        const cc = String(compCode || '').toLowerCase();
+        const compPanel = panels[cc];
+        const compVals = result_values?.components?.[cc]?.values || {};
+        const flags = compPanel ? computeFlagsForPanel(compPanel.parameters || [], compVals, patient) : {};
+        outFlags[cc] = flags;
+        outRefs[cc] = compPanel ? { parameters: compPanel.parameters } : { parameters: [] };
+      }
+      abnormal_flags = { components: outFlags };
+      referenceRanges = { components: outRefs };
+    } else if (panel) {
       abnormal_flags = computeFlagsForPanel(panel.parameters || [], result_values, patient);
+      referenceRanges = { parameters: panel.parameters };
     }
 
     // insert into test_results -- set sample_id if a sample exists
@@ -156,7 +189,7 @@ export async function saveResult(req, res, next) {
       RETURNING *
     `;
     const processedBy = req.user?.user_id || null;
-    const referenceRanges = panel ? { parameters: panel.parameters } : null;
+    // referenceRanges built above (handles composite); keep null if no panel
     const interp = (interpIn ?? comment) || null;
     const rec = (recIn ?? recPluralIn) || null;
   const ir = await pool.query(insertQ, [appointment_test_id, sampleId, at.test_code, processedBy, result_values, referenceRanges, abnormal_flags, interp, rec]);
@@ -188,6 +221,24 @@ export async function generateInterpretation(req, res, next) {
     const { patient, test, results } = req.body || {};
     if (!results) return res.status(400).json({ message: 'results are required' });
 
+    // Resolve panel definitions for prompt context
+    const testCode = String(test?.test_code || test?.code || '').toLowerCase();
+    const basePanel = panels[testCode];
+    const isComposite = !!(basePanel && basePanel.type === 'composite');
+    let panelForPrompt = null;
+    if (isComposite) {
+      const compCodes = Array.isArray(basePanel.components) ? basePanel.components : [];
+      const comps = compCodes.reduce((acc, c) => {
+        const k = String(c || '').toLowerCase();
+        const p = panels[k];
+        acc[k] = p ? { parameters: p.parameters, display_name: p.display_name } : { parameters: [] };
+        return acc;
+      }, {});
+      panelForPrompt = { type: 'composite', components: comps };
+    } else if (basePanel) {
+      panelForPrompt = { type: 'single', parameters: basePanel.parameters };
+    }
+
     const prompt = [
       'You are a certified Pathologist for a clinical laboratory. Based on the provided patient profile, test details, and measured parameters, provide:',
       '1) Interpretation: concise clinical interpretation highlighting abnormal/borderline values, potential differentials, and clinical correlation.',
@@ -196,14 +247,15 @@ export async function generateInterpretation(req, res, next) {
       'Constraints:',
       '- Be specific to the values and reference ranges provided. Do not restate all raw values.',
       '- Maintain an objective, professional, pathologist-style tone.',
-      '- Avoid generic disclaimers and avoid revealing internal reasoning. Do not include markdown or extra commentary.',
+      '- Avoid generic disclaimers and avoid revealing internal reasoning.', 
+      '- Do not include markdown or extra commentary. Do not put asterisks or formatting around text.',
       '- Keep each field under 200 words.',
       '',
       'Return a strict JSON object with exactly these keys: "interpretation" and "recommendation".',
       '',
       'Patient:', JSON.stringify(patient || {}),
       'Test:', JSON.stringify(test || {}),
-      'PanelParameters:', JSON.stringify(results?.panel || []),
+      'PanelParameters:', JSON.stringify(panelForPrompt || results?.panel || []),
       'MeasuredValues:', JSON.stringify(results?.values || results),
     ].join('\n');
 

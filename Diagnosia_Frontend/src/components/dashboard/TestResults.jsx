@@ -129,11 +129,44 @@ const TestResults = ({ results, onRefresh }) => {
     };
 
     const values = res.result_values || {};
-    const refParams = (res.reference_ranges && res.reference_ranges.parameters) || [];
-    // If reference param defs available, use them to preserve ordering and units/labels
+    const refParamsSingle = (res.reference_ranges && res.reference_ranges.parameters) || [];
+    const refParamsComponents = (res.reference_ranges && res.reference_ranges.components) || null;
+
+    // Build testParameters list. For composite, flatten with section label prefix.
     let testParameters = [];
-    if (Array.isArray(refParams) && refParams.length > 0) {
-      testParameters = refParams.map((p) => {
+    if (refParamsComponents && typeof refParamsComponents === 'object') {
+      for (const code of Object.keys(refParamsComponents)) {
+        const comp = refParamsComponents[code] || {};
+        const compParams = Array.isArray(comp.parameters) ? comp.parameters : [];
+        const compValues = values?.components?.[code]?.values || {};
+        const compFlags = (res?.abnormal_flags?.components?.[code]) || {};
+        compParams.forEach((p) => {
+          const key = p.key || p.label || p.name;
+          const raw = compValues[key];
+          const flagObj = compFlags[key] || {};
+          testParameters.push({
+            key: `${code}:${key}`,
+            parameter: `${(p.label || p.name || key)} (${String(code).toUpperCase()})`,
+            result: raw === undefined || raw === null ? '-' : (typeof raw === 'object' ? JSON.stringify(raw) : String(raw)),
+            unit: p.unit || '',
+            referenceRange: (() => {
+              try {
+                if (p.range) {
+                  if (p.range.low != null || p.range.high != null) return `${p.range.low ?? ''}-${p.range.high ?? ''}`;
+                  const male = p.range.male ? `${p.range.male.low ?? ''}-${p.range.male.high ?? ''}` : null;
+                  const female = p.range.female ? `${p.range.female.low ?? ''}-${p.range.female.high ?? ''}` : null;
+                  if (male || female) return `M:${male || '-'} F:${female || '-'}`;
+                }
+              } catch (e) {}
+              return p.referenceRange || '';
+            })(),
+            flag: flagObj.flag || 'normal',
+            status: flagObj.flag === 'normal' ? 'Normal' : (flagObj.flag === 'high' ? 'High' : (flagObj.flag === 'low' ? 'Low' : (flagObj.flag || ''))),
+          });
+        });
+      }
+    } else if (Array.isArray(refParamsSingle) && refParamsSingle.length > 0) {
+      testParameters = refParamsSingle.map((p) => {
         const key = p.key || p.label || p.name;
         const raw = values[key];
         const flagObj = (res.abnormal_flags && res.abnormal_flags[key]) || {};

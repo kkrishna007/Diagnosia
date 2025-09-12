@@ -612,10 +612,38 @@ export async function generateTestReportPDF({ result, user }) {
 
   // Build parameters table from result
   const values = result?.result_values || {};
-  const refParams = (result?.reference_ranges && result.reference_ranges.parameters) || [];
+  const refParamsSingle = (result?.reference_ranges && result.reference_ranges.parameters) || [];
+  const refParamsComponents = (result?.reference_ranges && result.reference_ranges.components) || null;
   let params = [];
-  if (Array.isArray(refParams) && refParams.length > 0) {
-    params = refParams.map((p) => {
+  if (refParamsComponents && typeof refParamsComponents === 'object') {
+    // Flatten composite with section label suffix
+    for (const code of Object.keys(refParamsComponents)) {
+      const comp = refParamsComponents[code] || {};
+      const compParams = Array.isArray(comp.parameters) ? comp.parameters : [];
+      const compValues = values?.components?.[code]?.values || {};
+      const compFlags = (result?.abnormal_flags?.components?.[code]) || {};
+      compParams.forEach((p) => {
+        const key = p.key || p.label || p.name;
+        const raw = compValues?.[key];
+        const flagObj = compFlags[key] || {};
+        const asText = raw === undefined || raw === null ? '-' : (typeof raw === 'object' ? JSON.stringify(raw) : String(raw));
+        const status = flagObj.flag === 'normal' ? 'Normal' : (flagObj.flag === 'high' ? 'High' : (flagObj.flag === 'low' ? 'Low' : (flagObj.flag || '')));
+        const range = (() => {
+          try {
+            if (p.range) {
+              if (p.range.low != null || p.range.high != null) return `${p.range.low ?? ''}-${p.range.high ?? ''}`;
+              const male = p.range.male ? `${p.range.male.low ?? ''}-${p.range.male.high ?? ''}` : null;
+              const female = p.range.female ? `${p.range.female.low ?? ''}-${p.range.female.high ?? ''}` : null;
+              if (male || female) return `M:${male || '-'} F:${female || '-'}`;
+            }
+          } catch {}
+          return p.referenceRange || '';
+        })();
+        params.push([`${p.label || p.name || key} (${String(code).toUpperCase()})`, asText, p.unit || '', range, status || '']);
+      });
+    }
+  } else if (Array.isArray(refParamsSingle) && refParamsSingle.length > 0) {
+    params = refParamsSingle.map((p) => {
       const key = p.key || p.label || p.name;
       const raw = values?.[key];
       const flagObj = (result?.abnormal_flags && result.abnormal_flags[key]) || {};
@@ -648,7 +676,6 @@ export async function generateTestReportPDF({ result, user }) {
         const v = raw.value ?? raw.result ?? raw.val ?? raw.reading ?? raw.text;
         valueText = v === undefined || v === null ? '-' : String(v);
         unit = unit || raw.unit || raw.units || raw.uom || '';
-        // reference range shape: {low, high} or {range: 'x-y'} or {referenceRange: 'x-y'}
         if (raw.referenceRange) {
           refRange = typeof raw.referenceRange === 'string' ? raw.referenceRange : `${raw.referenceRange.low ?? ''}-${raw.referenceRange.high ?? ''}`;
         } else if (raw.range) {

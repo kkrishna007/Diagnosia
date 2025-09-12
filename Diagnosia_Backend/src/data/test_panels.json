@@ -98,7 +98,9 @@
 		},
 	"healthpkg": {
 		"test_code": "healthpkg",
-		"display_name": "Complete Health Checkup (composite)",
+		"display_name": "Complete Health Checkup",
+		"type": "composite",
+		"components": ["cbc", "kft", "lft", "lipid", "thyroid", "urine", "diabpkg", "vitd", "iron"],
 		"notes": "Composite panel - includes CBC, KFT, LFT, Lipid, Thyroid, Urine, Diabetes, Vitamin D, Iron. Use UI to render each sub-panel.",
 		"parameters": []
 	}
