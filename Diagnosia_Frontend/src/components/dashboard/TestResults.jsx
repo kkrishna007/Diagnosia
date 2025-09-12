@@ -49,16 +49,63 @@ const TestResults = ({ results, onRefresh }) => {
     }
   };
 
-  const handleShareReport = (result) => {
-    if (navigator.share) {
-      navigator.share({
-        title: `${result.testName} Report`,
-        text: `Lab test report for ${result.testName}`,
-        url: result.reportUrl,
-      });
-    } else {
-      navigator.clipboard.writeText(result.reportUrl);
-      alert('Report link copied to clipboard!');
+  const handleShareReport = async (result) => {
+    try {
+      const report = buildReportData(result);
+      const testName = result?.testName || result?.test_name || result?.name || 'Lab Test';
+      const reportId = getResultId(result) || '-';
+      const reportDate = formatDate(
+        result?.processed_at || result?.reportDate || result?.reported_at || result?.completed_at || result?.created_at
+      );
+      const patientName = report?.patientInfo?.name || 'Patient';
+      const patientAge = report?.patientInfo?.age != null ? `${report.patientInfo.age} years` : '-';
+      const patientGender = report?.patientInfo?.gender || '-';
+
+      const params = Array.isArray(report?.testParameters) ? report.testParameters : [];
+      const resultsBlock = params.map(p => {
+        const unit = p.unit ? ` ${p.unit}` : '';
+        const status = p.status ? ` (${p.status})` : '';
+        return `- ${p.parameter}: ${p.result}${unit}${status}`;
+      }).join('\n');
+
+      const interp = (result?.interpretation || '').toString().trim();
+      const recom = (result?.recommendations || '').toString().trim();
+
+      const lines = [
+        'Diagnosia Lab — Laboratory Report',
+        '',
+        `Test: ${testName}`,
+        `Report ID: ${reportId}`,
+        `Report Date: ${reportDate}`,
+        '',
+        `Patient: ${patientName}`,
+        `Age/Gender: ${patientAge}, ${patientGender}`,
+        '',
+        'Results:',
+        resultsBlock || '-'
+      ];
+      if (interp) {
+        lines.push('', 'Interpretation:', interp);
+      }
+      if (recom) {
+        lines.push('', 'Recommendations:', recom);
+      }
+      if (result?.reportUrl) {
+        lines.push('', `Link: ${result.reportUrl}`);
+      }
+      const shareText = lines.join('\n');
+
+      if (navigator.share) {
+        const shareData = { title: `${testName} Report — ${patientName}`, text: shareText };
+        if (result?.reportUrl) shareData.url = result.reportUrl;
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        alert('Report summary copied to clipboard!');
+      }
+    } catch (e) {
+      console.error('Failed to share report:', e);
+      alert('Unable to share the report right now. Please try again.');
     }
   };
 
