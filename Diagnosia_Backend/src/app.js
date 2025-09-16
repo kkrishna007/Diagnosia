@@ -13,6 +13,7 @@ import employeeAuthRoutes from './routes/employeeAuth.js';
 import employeeRoutes from './routes/employee.js';
 import agentChatRoutes from './routes/agentChat.js';
 import errorHandler from './middleware/errorHandler.js';
+import { verifyEmailConfig } from './services/emailService.js';
 
 dotenv.config();
 
@@ -50,4 +51,6 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  // Verify SMTP configuration once server is up (non-blocking)
+  verifyEmailConfig();
 });

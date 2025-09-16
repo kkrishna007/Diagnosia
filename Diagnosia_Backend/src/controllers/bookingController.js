@@ -1,4 +1,5 @@
 import pool from '../../config/db.js';
+import { sendBookingConfirmationEmail } from '../services/emailService.js';
 
 // Create a new appointment and appointment_test
 export const createBooking = async (req, res, next) => {
@@ -62,7 +63,44 @@ export const createBooking = async (req, res, next) => {
        RETURNING *`,
   [appointment.appointment_id, test_code, test_price, finalPatientName, finalPatientAge, finalPatientGender]
     );
-    res.status(201).json({ appointment, appointment_test: apptTestRes.rows[0] });
+    const appointmentTest = apptTestRes.rows[0];
+
+    // Fetch user email & name for email (could be cached earlier but minimal extra query)
+    let userEmail = null; let userName = null; let testName = null;
+    try {
+      const userRes = await pool.query('SELECT email, first_name, last_name FROM users WHERE user_id = $1', [req.user.user_id]);
+      if (userRes.rows.length) {
+        userEmail = userRes.rows[0].email;
+        userName = `${userRes.rows[0].first_name || ''} ${userRes.rows[0].last_name || ''}`.trim() || null;
+      }
+      const testNameRes = await pool.query('SELECT test_name FROM tests WHERE test_code = $1', [appointmentTest.test_code]);
+      if (testNameRes.rows.length) testName = testNameRes.rows[0].test_name;
+    } catch (e) {
+      console.warn('Could not fetch user/test details for email', e.message);
+    }
+
+    // Fire and forget email (don't block response)
+    if (userEmail) {
+      let addressLine = null;
+      if (appointment.appointment_type === 'home_collection' && appointment.collection_address_id) {
+        try {
+          const addrRes = await pool.query('SELECT address FROM user_addresses WHERE address_id = $1', [appointment.collection_address_id]);
+          if (addrRes.rows.length) addressLine = addrRes.rows[0].address;
+        } catch (e) {
+          console.warn('Could not fetch address for email', e.message);
+        }
+      }
+      sendBookingConfirmationEmail({
+        to: userEmail,
+        userName,
+        appointment,
+        appointmentTest,
+        testName,
+        addressLine,
+      }).catch(err => console.error('Email send error (booking confirmation)', err.message));
+    }
+
+    res.status(201).json({ appointment, appointment_test: appointmentTest });
   } catch (err) {
     next(err);
   }
