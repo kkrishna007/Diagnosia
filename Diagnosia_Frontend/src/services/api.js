@@ -5,7 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -115,6 +115,10 @@ export const apiService = {
   chatbot: {
     sendMessage: (message) => api.post('/chatbot/message', { message }),
     getFAQs: () => api.get('/chatbot/faqs'),
+  },
+  // Agentic chatbot endpoint
+  agentChat: {
+    send: (message, sessionId) => api.post('/agent-chat', { message, session_id: sessionId }),
   },
 
   // Employee endpoints

@@ -11,6 +11,7 @@ import paymentRoutes from './routes/payments.js';
 import reportRoutes from './routes/reports.js';
 import employeeAuthRoutes from './routes/employeeAuth.js';
 import employeeRoutes from './routes/employee.js';
+import agentChatRoutes from './routes/agentChat.js';
 import errorHandler from './middleware/errorHandler.js';
 
 dotenv.config();
@@ -42,6 +43,7 @@ app.use('/api/employee', employeeRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/agent-chat', agentChatRoutes);
 
 app.use(errorHandler);
 

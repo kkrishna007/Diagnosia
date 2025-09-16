@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, Send, X, Minimize2, Bot, User } from 'lucide-react';
+import { MessageCircle, Send, X, Minimize2, Bot } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/input';
+import { apiService } from '../../services/api';
 
 const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -10,18 +11,13 @@ const Chatbot = () => {
     {
       id: 1,
       type: 'bot',
-      content: 'Hello! I\'m your Diagnosia health assistant. How can I help you today?',
-      timestamp: new Date(),
-      options: [
-        'Book a test',
-        'View test reports',
-        'Check appointment status',
-        'Get health tips'
-      ]
+      content: "Hello! I'm your Diagnosia assistant. Ask me to book a test, view a report, or check an appointment status.",
+      timestamp: new Date()
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -32,88 +28,41 @@ const Chatbot = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Predefined responses for demonstration
-  const botResponses = {
-    'book a test': {
-      content: 'I can help you book a test! Here are some popular options:',
-      options: ['Blood Tests', 'Urine Tests', 'Health Packages', 'Browse all tests']
-    },
-    'blood tests': {
-      content: 'Here are some popular blood tests we offer:',
-      options: ['Complete Blood Count (CBC)', 'Lipid Profile', 'Blood Sugar', 'Thyroid Profile']
-    },
-    'view test reports': {
-      content: 'To view your test reports, please visit your dashboard. You can access all your completed reports there with download options.',
-      options: ['Go to Dashboard', 'Contact Support']
-    },
-    'check appointment status': {
-      content: 'To check your appointment status, I\'ll need your booking ID. You can also check all your appointments in your dashboard.',
-      options: ['Enter Booking ID', 'Go to Dashboard']
-    },
-    'get health tips': {
-      content: 'Here are some important health tips:',
-      tips: [
-        '💧 Stay hydrated - drink at least 8 glasses of water daily',
-        '🥗 Eat a balanced diet rich in fruits and vegetables',
-        '🏃‍♂️ Exercise regularly - at least 30 minutes daily',
-        '😴 Get 7-8 hours of quality sleep',
-        '🚭 Avoid smoking and limit alcohol consumption'
-      ]
-    },
-    'complete blood count (cbc)': {
-      content: 'Complete Blood Count (CBC) is a comprehensive blood test that evaluates your overall health. Price: ₹350',
-      options: ['Book CBC Test', 'Learn more about CBC', 'View other tests']
-    },
-    'default': {
-      content: 'I\'m here to help! You can ask me about booking tests, viewing reports, or getting health information.',
-      options: ['Book a test', 'View test reports', 'Health tips', 'Contact support']
-    }
-  };
-
   const handleSendMessage = async (message = inputMessage) => {
     if (!message.trim()) return;
-
-    // Add user message
     const userMessage = {
       id: Date.now(),
       type: 'user',
       content: message,
       timestamp: new Date()
     };
-
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsTyping(true);
-
-    // Simulate bot typing delay
-    setTimeout(() => {
-      const botResponse = getBotResponse(message.toLowerCase());
-      const botMessage = {
-        id: Date.now() + 1,
+    try {
+      const resp = await apiService.agentChat.send(message, sessionId);
+      if (!sessionId && resp.data?.session_id) setSessionId(resp.data.session_id);
+      const replies = (resp.data?.messages || []).map((m, idx) => ({
+        id: Date.now() + idx + 1,
         type: 'bot',
-        content: botResponse.content,
-        timestamp: new Date(),
-        options: botResponse.options,
-        tips: botResponse.tips
-      };
-
-      setMessages(prev => [...prev, botMessage]);
-      setIsTyping(false);
-    }, 1000);
-  };
-
-  const getBotResponse = (userInput) => {
-    // Simple keyword matching for demonstration
-    for (const [key, response] of Object.entries(botResponses)) {
-      if (userInput.includes(key)) {
-        return response;
+        content: m,
+        timestamp: new Date()
+      }));
+      setMessages(prev => [...prev, ...replies]);
+    } catch (e) {
+      const status = e?.response?.status;
+      const serverMsg = e?.response?.data?.message;
+      const networkMsg = e?.message;
+      let content;
+      if (status) {
+        content = serverMsg ? `Error ${status}: ${serverMsg}` : `Error ${status}: Unexpected server error.`;
+      } else {
+        content = serverMsg || `Network error: ${networkMsg || 'Request failed (no response). Check backend console.'}`;
       }
+      setMessages(prev => [...prev, { id: Date.now() + 999, type: 'bot', content, timestamp: new Date() }]);
+    } finally {
+      setIsTyping(false);
     }
-    return botResponses.default;
-  };
-
-  const handleOptionClick = (option) => {
-    handleSendMessage(option);
   };
 
   const handleKeyPress = (e) => {
@@ -136,7 +85,7 @@ const Chatbot = () => {
 
   return (
     <div className={`fixed bottom-6 right-6 z-50 transition-all duration-300 ${
-      isMinimized ? 'w-80 h-16' : 'w-80 h-96'
+      isMinimized ? 'w-96 h-16' : 'w-[30rem] h-[36rem]' /* 30rem ≈ 480px width, 36rem ≈ 576px height */
     }`}>
       <div className="bg-white rounded-lg shadow-xl border border-gray-200 h-full flex flex-col">
         {/* Header */}
@@ -175,7 +124,8 @@ const Chatbot = () => {
                   key={message.id}
                   className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                  {/* Expanded message bubble max width to better use enlarged container */}
+                  <div className={`max-w-sm lg:max-w-lg px-4 py-2 rounded-lg ${
                     message.type === 'user'
                       ? 'bg-blue-600 text-white'
                       : 'bg-white text-gray-900 border border-gray-200'
@@ -188,31 +138,7 @@ const Chatbot = () => {
                     )}
                     <p className="text-sm">{message.content}</p>
                     
-                    {/* Health Tips */}
-                    {message.tips && (
-                      <div className="mt-3 space-y-2">
-                        {message.tips.map((tip, index) => (
-                          <div key={index} className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                            {tip}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* Quick Options */}
-                    {message.options && (
-                      <div className="mt-3 space-y-1">
-                        {message.options.map((option, index) => (
-                          <button
-                            key={index}
-                            onClick={() => handleOptionClick(option)}
-                            className="block w-full text-left text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
-                          >
-                            {option}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {/* (Previously tips/options - now dynamic free-form text from agents) */}
                     
                     <p className="text-xs text-gray-400 mt-2">
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -242,6 +168,7 @@ const Chatbot = () => {
 
             {/* Input */}
             <div className="p-4 border-t border-gray-200 bg-white rounded-b-lg">
+              {/* Separate input and send button */}
               <div className="flex space-x-2">
                 <Input
                   type="text"
@@ -255,14 +182,13 @@ const Chatbot = () => {
                   onClick={() => handleSendMessage()}
                   disabled={!inputMessage.trim() || isTyping}
                   size="sm"
+                  aria-label="Send message"
                   className="px-3"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Ask me about tests, reports, appointments, or health tips!
-              </p>
+              <p className="text-xs text-gray-500 mt-2">Powered by intelligent agents. Ask me to book tests, view reports, or check appointment status.</p>
             </div>
           </>
         )}

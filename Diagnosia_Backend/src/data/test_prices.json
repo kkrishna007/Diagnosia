@@ -1,0 +1,52 @@
+[
+  {
+    "test_name": "Complete Blood Count (CBC)",
+    "test_code": "CBC",
+    "base_price": 350
+  },
+  {
+    "test_name": "Lipid Profile",
+    "test_code": "LIPID",
+    "base_price": 450
+  },
+  {
+    "test_name": "Thyroid Profile (T3, T4, TSH)",
+    "test_code": "THYROID",
+    "base_price": 600
+  },
+  {
+    "test_name": "Diabetes Package (HbA1c + Glucose)",
+    "test_code": "DIABPKG",
+    "base_price": 800
+  },
+  {
+    "test_name": "Liver Function Test (LFT)",
+    "test_code": "LFT",
+    "base_price": 500
+  },
+  {
+    "test_name": "Kidney Function Test (KFT)",
+    "test_code": "KFT",
+    "base_price": 400
+  },
+  {
+    "test_name": "Urine Routine Examination",
+    "test_code": "URINE",
+    "base_price": 200
+  },
+  {
+    "test_name": "Vitamin D Test",
+    "test_code": "VITD",
+    "base_price": 1200
+  },
+  {
+    "test_name": "Complete Health Checkup",
+    "test_code": "HEALTHPKG",
+    "base_price": 2500
+  },
+  {
+    "test_name": "Iron Deficiency Panel",
+    "test_code": "IRON",
+    "base_price": 800
+  }
+]
