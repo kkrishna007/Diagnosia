@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeFlagsForPanel } from '../utils/computeFlags.js';
+import { sendReportReadyEmail } from '../services/emailService.js';
 // AI generation
 let genState = null;
 async function getGenModel() {
@@ -172,10 +173,16 @@ export async function saveResult(req, res, next) {
       referenceRanges = { parameters: panel.parameters };
     }
 
-    // insert into test_results -- set sample_id if a sample exists
+    // insert into test_results -- fetch latest sample (id, code, collected_at) if it exists
     let sampleId = null;
-    const sres = await pool.query('SELECT sample_id FROM samples WHERE appointment_test_id = $1 ORDER BY collected_at DESC LIMIT 1', [appointment_test_id]);
-    if (sres.rows.length) sampleId = sres.rows[0].sample_id;
+    let sampleCode = null;
+    let sampleCollectedAt = null;
+    const sres = await pool.query('SELECT sample_id, sample_code, collected_at FROM samples WHERE appointment_test_id = $1 ORDER BY collected_at DESC LIMIT 1', [appointment_test_id]);
+    if (sres.rows.length) {
+      sampleId = sres.rows[0].sample_id;
+      sampleCode = sres.rows[0].sample_code || sres.rows[0].sample_id;
+      sampleCollectedAt = sres.rows[0].collected_at;
+    }
 
     const insertQ = `
       INSERT INTO test_results (
@@ -202,7 +209,64 @@ export async function saveResult(req, res, next) {
       await pool.query('UPDATE appointments SET status = $1 WHERE appointment_id = $2', ['completed', at.appointment_id]);
     } catch (e) { /* ignore */ }
 
-  res.status(201).json(ir.rows[0]);
+    // Send report-ready email to patient (if email exists)
+    try {
+      if (patient?.email) {
+        // Build reportDetails object for email
+        const reportDetails = {
+          patient_name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+          patient_age: patient.date_of_birth ? Math.max(0, new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear()) : '-',
+          patient_gender: patient.gender || '-',
+          patient_email: patient.email,
+          patient_phone: patient.phone,
+          // Prefer explicit appointment test name (if set by booking), otherwise fall back to panel display_name, then code
+          test_name: (at.test_name && String(at.test_name).trim()) ? at.test_name : ((panel && panel.display_name) ? panel.display_name : at.test_code),
+          test_code: at.test_code,
+          appointment_date: appt.appointment_date,
+          report_date: new Date().toISOString().slice(0,10),
+          sample_code: sampleCode || sampleId || '-',
+          sample_collected_at: sampleCollectedAt || '-',
+          results: [],
+          interpretation: interp,
+          recommendation: rec
+        };
+        // Flatten result_values to array for table
+        if (panel && panel.parameters && result_values) {
+          for (const param of panel.parameters) {
+            const key = param.key || param.parameter || param.name;
+            const rawVal = result_values[key];
+            // Normalize status: computeFlags returns objects like { key, value, flag, reason }
+            const flagObj = abnormal_flags && abnormal_flags[key] ? abnormal_flags[key] : null;
+            let statusLabel = '-';
+            if (flagObj && typeof flagObj === 'object') {
+              const f = flagObj.flag || flagObj.status || null;
+              if (f) statusLabel = String(f).charAt(0).toUpperCase() + String(f).slice(1);
+              if (flagObj.reason) statusLabel += ` (${flagObj.reason})`;
+            }
+            reportDetails.results.push({
+              parameter: param.label || key,
+              value: (typeof rawVal === 'object' ? JSON.stringify(rawVal) : (rawVal ?? '-')),
+              unit: param.unit || '-',
+              reference: param.range || param.referenceRange || '-',
+              status: statusLabel
+            });
+          }
+        }
+        // Send email
+        await sendReportReadyEmail({
+          to: patient.email,
+          userName: reportDetails.patient_name,
+          appointment: appt,
+          appointmentTest: at,
+          testName: reportDetails.test_name,
+          reportDetails
+        });
+      }
+    } catch (emailErr) {
+      console.error('Error sending report ready email:', emailErr.message);
+    }
+
+    res.status(201).json(ir.rows[0]);
   } catch (err) {
     next(err);
   }

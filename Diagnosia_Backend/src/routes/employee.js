@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import pool from '../../config/db.js';
 import { authEmployee, requireRoles } from '../middleware/employeeAuth.js';
 import * as labController from '../controllers/labController.js';
+import { sendSampleCollectionEmail } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -184,6 +185,39 @@ router.post('/collector/tasks/:taskId/collect', authEmployee, requireRoles('samp
       }
       // Update task
       await pool.query('UPDATE collection_tasks SET status = $1, collected_at = NOW(), collector_id = COALESCE(collector_id, $2) WHERE task_id = $3', ['collected', userId, taskId]);
+      
+      // Send email notification for sample collection
+      try {
+        // Fetch appointment and user details for email
+        const appointmentRes = await pool.query('SELECT * FROM appointments WHERE appointment_id = $1', [task.appointment_id]);
+        const appointment = appointmentRes.rows[0];
+        
+        if (appointment) {
+          const userRes = await pool.query('SELECT email, first_name, last_name FROM users WHERE user_id = $1', [appointment.patient_id]);
+          const user = userRes.rows[0];
+          
+          const testRes = await pool.query('SELECT test_name FROM tests WHERE test_code = $1', [task.test_code]);
+          const testName = testRes.rows[0]?.test_name;
+          
+          const appointmentTestRes = await pool.query('SELECT * FROM appointment_tests WHERE appointment_test_id = $1', [task.appointment_test_id]);
+          const appointmentTest = appointmentTestRes.rows[0];
+          
+          if (user?.email && appointmentTest) {
+            sendSampleCollectionEmail({
+              to: user.email,
+              userName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || null,
+              appointment,
+              appointmentTest,
+              testName,
+              sampleCode: insertSample.rows[0].sample_code,
+              collectedAt: insertSample.rows[0].collected_at,
+            }).catch(err => console.error('Email send error (sample collection)', err.message));
+          }
+        }
+      } catch (emailErr) {
+        console.error('Error sending sample collection email:', emailErr.message);
+      }
+      
       return res.json({ ok: true, sample: insertSample.rows[0] });
     } else {
       // Fallback: treat taskId as appointment_test_id
@@ -203,6 +237,36 @@ router.post('/collector/tasks/:taskId/collect', authEmployee, requireRoles('samp
       if (test.appointment_id) {
         await pool.query('UPDATE appointments SET status = $1 WHERE appointment_id = $2', ['sample_collected', test.appointment_id]);
       }
+      
+      // Send email notification for sample collection
+      try {
+        // Fetch appointment and user details for email
+        const appointmentRes = await pool.query('SELECT * FROM appointments WHERE appointment_id = $1', [test.appointment_id]);
+        const appointment = appointmentRes.rows[0];
+        
+        if (appointment) {
+          const userRes = await pool.query('SELECT email, first_name, last_name FROM users WHERE user_id = $1', [appointment.patient_id]);
+          const user = userRes.rows[0];
+          
+          const testNameRes = await pool.query('SELECT test_name FROM tests WHERE test_code = $1', [test.test_code]);
+          const testName = testNameRes.rows[0]?.test_name;
+          
+          if (user?.email) {
+            sendSampleCollectionEmail({
+              to: user.email,
+              userName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || null,
+              appointment,
+              appointmentTest: test,
+              testName,
+              sampleCode: insertSample.rows[0].sample_code,
+              collectedAt: insertSample.rows[0].collected_at,
+            }).catch(err => console.error('Email send error (sample collection)', err.message));
+          }
+        }
+      } catch (emailErr) {
+        console.error('Error sending sample collection email:', emailErr.message);
+      }
+      
       return res.json({ ok: true, sample: insertSample.rows[0] });
     }
   } catch (err) {
