@@ -15,7 +15,7 @@ const TimeSlotPicker = ({ onTimeSlotSelect, selectedDate, selectedTimeSlot }) =>
     { id: '12-14', label: '12:00 PM - 2:00 PM', available: true },
     { id: '14-16', label: '2:00 PM - 4:00 PM', available: true },
     { id: '16-18', label: '4:00 PM - 6:00 PM', available: true },
-    { id: '18-20', label: '6:00 PM - 8:00 PM', available: false }, // Example of unavailable slot
+  { id: '18-20', label: '6:00 PM - 8:00 PM', available: true },
   ];
 
   // Generate week days starting from today

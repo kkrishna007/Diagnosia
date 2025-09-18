@@ -169,21 +169,23 @@ const Chatbot = () => {
             {/* Input */}
             <div className="p-4 border-t border-gray-200 bg-white rounded-b-lg">
               {/* Separate input and send button */}
-              <div className="flex space-x-2">
-                <Input
-                  type="text"
-                  placeholder="Type your message..."
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  className="flex-1"
-                />
+              <div className="flex gap-2 w-full">
+                <div className="flex-1 min-w-0">
+                  <Input
+                    type="text"
+                    placeholder="Type your message..."
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    containerClassName="w-full"
+                  />
+                </div>
                 <Button
                   onClick={() => handleSendMessage()}
                   disabled={!inputMessage.trim() || isTyping}
                   size="sm"
                   aria-label="Send message"
-                  className="px-3"
+                  className="px-3 flex-shrink-0"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
