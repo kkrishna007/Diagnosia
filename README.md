@@ -1,124 +1,154 @@
-## Diagnosia Monorepo
+# Diagnosia - Online Pathology Lab System
 
-Full‑stack Online Pathology Lab Booking System:
-- Backend: Node.js/Express + PostgreSQL
-- Frontend: React + Vite + Tailwind
+Diagnosia is a full-stack, enterprise-grade application for managing an online pathology lab. It provides a seamless experience for patients to book tests and view results, and a comprehensive portal for employees (sample collectors, lab technicians, and admins) to manage operations. The system features an AI-powered chatbot for booking and an AI interpretation generator for test results.
 
-### Repository structure
+## Key Features
+
+*   **Patient Portal**:
+    *   User authentication (Register/Login).
+    *   Browse and search a catalog of lab tests and health packages.
+    *   Book appointments for home sample collection or lab visits.
+    *   View appointment history and status updates (Confirmed, Sample Collected, Completed).
+    *   View and download detailed, formatted test reports in PDF.
+*   **Employee & Admin Portals**:
+    *   Role-based access control for Admins, Lab Managers, Lab Technicians, and Sample Collectors.
+    *   **Admin**: Manage users, tests, and view system-wide operational data.
+    *   **Sample Collector**: View assigned tasks, manage collection schedules, and update sample status to "collected".
+    *   **Lab Technician**: Access a worklist of collected samples, enter test results, and generate AI-powered interpretations.
+*   **AI-Powered Assistant**:
+    *   An intelligent chatbot (powered by Google Gemini) that assists users with booking tests, viewing reports, and checking appointment status.
+*   **Automated Notifications**:
+    *   Email notifications for key events like booking confirmation, sample collection, and report readiness.
+*   **Dynamic PDF Generation**:
+    *   On-the-fly generation of booking receipts and detailed, multi-page laboratory test reports.
+
+## Technology Stack
+
+*   **Backend**:
+    *   Node.js, Express.js
+    *   PostgreSQL for the database
+    *   JWT (JSON Web Tokens) for authentication
+    *   bcrypt.js for password hashing
+    *   nodemailer for sending emails
+    *   `@google/generative-ai` for AI features
+*   **Frontend**:
+    *   React.js, Vite
+    *   Tailwind CSS for styling
+    *   React Router for navigation
+    *   Axios for API communication
+    *   jsPDF & jspdf-autotable for PDF generation
+*   **Database**:
+    *   PostgreSQL with a comprehensive schema including users, roles, tests, appointments, samples, results, and more.
+
+## Project Structure
 
 ```
-Diagnosia/
-├─ Diagnosia_Backend/       # Express API, PostgreSQL access, business logic
-│  ├─ config/               # DB pool config
-│  ├─ src/                  # App, routes, controllers, middleware
-│  └─ models/               # SQL schema & seed scripts
-├─ Diagnosia_Frontend/      # React app (Vite)
-│  ├─ public/
-│  └─ src/
-└─ Diagnosia_Docs/          # ER diagrams & schema docs
+.
+├── Diagnosia_Backend/     # Node.js/Express REST API
+│   ├── src/
+│   │   ├── controllers/   # Request handling logic
+│   │   ├── middleware/    # Auth and error handling
+│   │   ├── models/        # Database schema and seeds
+│   │   ├── routes/        # API endpoint definitions
+│   │   └── agents/        # AI chatbot logic
+│   └── .env.example
+├── Diagnosia_Frontend/    # React patient & employee UI
+│   ├── src/
+│   │   ├── components/    # Reusable UI components
+│   │   ├── context/       # Auth state management
+│   │   ├── hooks/         # Custom React hooks
+│   │   ├── pages/         # Top-level page components
+│   │   └── employee/      # Employee portal components and pages
+│   └── vite.config.js
+├── Daignosia_DB/
+│   └── schema.sql         # Full database schema export
+└── Diagnosia_Docs/
+    ├── diagnosia_schema.md
+    └── Diagnosia_userStories.md
 ```
 
----
+## Getting Started
 
-## Prerequisites
-- Node.js 18+ (recommended LTS)
-- npm 9+ (bundled with Node 18)
-- PostgreSQL 13+ (with psql CLI available on PATH)
+### Prerequisites
 
----
+*   Node.js v18+
+*   npm v9+
+*   PostgreSQL v13+
 
-## Quick start (local development)
+### 1. Configure Environment
 
-1) Backend environment
-- Copy example env and adjust values
+The project uses `.env` files for configuration. Copy the examples in both the frontend and backend directories.
 
-```powershell
-Copy-Item "Diagnosia_Backend/.env.example" "Diagnosia_Backend/.env"
+**Backend:**
+```bash
+cp Diagnosia_Backend/.env.example Diagnosia_Backend/.env
+```
+Edit `Diagnosia_Backend/.env` with your details:
+```env
+PORT=5000
+DATABASE_URL=postgres://YOUR_USER:YOUR_PASSWORD@localhost:5432/diagnosia
+JWT_SECRET=a-very-strong-and-secret-key-for-jwt
+GEMINI_API_KEY=your_google_ai_studio_api_key
+
+# Optional for email notifications
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your_gmail_app_password
+FROM_EMAIL="Diagnosia Lab <your-email@gmail.com>"
 ```
 
-Edit `Diagnosia_Backend/.env`:
-- PORT=5000 (default used by the frontend proxy)
-- DATABASE_URL=postgres://<user>:<password>@localhost:5432/diagnosia
-- JWT_SECRET=your-strong-secret
+**Frontend:**
+The frontend defaults to using a proxy. No `.env` file is needed unless you change the backend port.
 
-2) Initialize database (first run only)
-Create a database and run schema + optional seed:
+### 2. Set Up the Database
 
-```powershell
-psql -U <user> -h localhost -p 5432 -c "CREATE DATABASE diagnosia;"
-psql -U <user> -h localhost -d diagnosia -f "Diagnosia_Backend/src/models/init.sql"
-# Optional: sample data
-psql -U <user> -h localhost -d diagnosia -f "Diagnosia_Backend/src/models/seed.sql"
+You'll need `psql`, the PostgreSQL command-line tool.
+
+```bash
+# 1. Create a user and a database
+psql -c "CREATE DATABASE diagnosia;"
+
+# 2. Initialize the schema
+psql -d diagnosia -f Diagnosia_Backend/src/models/init.sql
+
+# 3. Seed roles and sample data (includes default admin user)
+psql -d diagnosia -f Diagnosia_Backend/src/models/seed_roles.sql
+psql -d diagnosia -f Diagnosia_Backend/src/models/seed.sql
 ```
+This seeds the database with several users, including an admin.
 
-3) Install dependencies
+*   **Admin Login**: `admin@diagnosia.test` / `Admin@1234` (Use the `/admin/login` page)
 
-```powershell
-# Backend
+### 3. Install Dependencies
+
+Run `npm install` in both the frontend and backend directories.
+
+```bash
+# In the root directory, install backend dependencies
 cd Diagnosia_Backend
 npm install
 
-# Frontend (in another shell or after the above completes)
+# Then, install frontend dependencies
 cd ../Diagnosia_Frontend
 npm install
 ```
 
-4) Run in development
+### 4. Run The Application
 
-```powershell
-# Backend (shell 1)
+You will need two separate terminals to run the backend and frontend servers.
+
+**Terminal 1: Start the Backend Server**
+```bash
 cd Diagnosia_Backend
-npm run dev   # starts Express on http://localhost:5000
-
-# Frontend (shell 2)
-cd Diagnosia_Frontend
-npm run dev   # starts Vite on http://localhost:3000
+npm run dev
 ```
+The backend will be running on `http://localhost:5000`.
 
-Open http://localhost:3000. The Vite dev server proxies `/api` requests to `http://localhost:5000` by default (see `Diagnosia_Frontend/vite.config.js`).
-
----
-
-## Configuration
-
-### Backend (`Diagnosia_Backend/.env`)
-- PORT=5000
-- DATABASE_URL=postgres://<user>:<password>@localhost:5432/diagnosia
-- JWT_SECRET=replace-me
-
-The API base URL is `http://localhost:5000/api`.
-
-### Frontend (`Diagnosia_Frontend/.env`)
-Optional. Defaults to the proxy set in Vite config.
-
-- VITE_API_URL=http://localhost:5000/api
-
-If you set `VITE_API_URL`, the frontend will use it instead of the Vite proxy.
-
----
-
-## Useful scripts
-
-Backend (from `Diagnosia_Backend`):
-- `npm run dev` – start API with nodemon
-- `npm start` – start API with node
-
-Frontend (from `Diagnosia_Frontend`):
-- `npm run dev` – start Vite dev server
-- `npm run build` – build production bundle to `dist/`
-- `npm run preview` – preview the production build locally
-
----
-
-## Troubleshooting
-- Port in use: change `PORT` in backend `.env` and update `VITE_API_URL` or Vite proxy target accordingly.
-- Database connection errors: verify `DATABASE_URL` and that the `diagnosia` DB exists; run the SQL scripts if empty.
-- 401 Unauthorized from API: ensure `JWT_SECRET` is set consistently and tokens are present in localStorage.
-- CORS issues: the current server enables CORS broadly; if you lock it down later, add your frontend origin.
-
----
-
-## Production notes (high level)
-- Build the frontend (`npm run build`) and serve `dist/` via your preferred static host or behind the Express app with a static route (not wired by default).
-- Configure a managed PostgreSQL instance and set `DATABASE_URL`.
-- Use environment variables for secrets via your host’s secret manager.
+**Terminal 2: Start the Frontend Server**
+```bash
+cd Diagnosia_Frontend
+npm run dev
+```
+The frontend will be running on `http://localhost:3000`. Open this URL in your browser. The Vite dev server will automatically proxy API requests from the frontend to the backend.
