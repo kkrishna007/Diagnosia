@@ -33,6 +33,16 @@ app.use((req, res, next) => {
   return next();
 });
 
+// Health-check endpoint for Render or other platforms to monitor service
+// Responds quickly with service status and uptime
+app.get('/_health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: Date.now()
+  });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/tests', testRoutes);
 app.use('/api/bookings', bookingRoutes);
