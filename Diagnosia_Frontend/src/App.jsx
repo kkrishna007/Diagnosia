@@ -14,6 +14,8 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Tests from './pages/Tests';
 import Booking from './pages/Booking';
+import Payment from './pages/Payment';
+import BookingSuccess from './pages/BookingSuccess';
 import About from './pages/About';
 
 function App() {
@@ -51,6 +53,16 @@ function App() {
                 <Route path="/booking/:testId" element={
                   <ProtectedRoute>
                     <Booking />
+                  </ProtectedRoute>
+                } />
+                <Route path="/payment" element={
+                  <ProtectedRoute>
+                    <Payment />
+                  </ProtectedRoute>
+                } />
+                <Route path="/booking-success" element={
+                  <ProtectedRoute>
+                    <BookingSuccess />
                   </ProtectedRoute>
                 } />
                 

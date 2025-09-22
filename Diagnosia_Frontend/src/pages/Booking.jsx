@@ -41,7 +41,15 @@ const Booking = () => {
   };
 
   const handleBookingComplete = (data) => {
+    // Instead of showing success inline, redirect to payment step with booking data
+    // store locally in case something needs it, but navigate to /payment
     setBookingData(data);
+    try {
+      // clear any previous payment-success flag for this booking flow so the payment page is accessible
+      const key = data?.booking?.id ? `diagnosia_payment_done_${data.booking.id}` : 'diagnosia_payment_done_latest';
+      localStorage.removeItem(key);
+    } catch (e) {}
+    navigate('/payment', { state: { bookingData: data } });
   };
 
   if (loading) {
@@ -96,7 +104,11 @@ const Booking = () => {
             />
           </>
         ) : (
-          <BookingConfirmation bookingData={bookingData} />
+          // We no longer render booking confirmation inline; user is redirected to /payment
+          <BookingForm 
+            selectedTest={selectedTest}
+            onBookingComplete={handleBookingComplete}
+          />
         )}
       </div>
     </div>
